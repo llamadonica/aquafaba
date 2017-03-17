@@ -68,7 +68,9 @@ define(['convert'], function (convert) {
       assert.equal(passThrough.convert(str), str);
       done();
     });
-    test('Fails on bad decode', (done) => {
+    test('Encodes base64', (done) => {
+      let stringToBase64Encoder = new convert.Utf8Encoder(new convert.Base64Encoder());
+      assert.equal(stringToBase64Encoder.convert('any carnal pleasure'), 'YW55IGNhcm5hbCBwbGVhc3VyZQ==');
       done();
     });
   });

@@ -126,6 +126,61 @@ define('convert', ['core'], function(core) {
         return stringResult;
       }
     };
+    let TypedArray = Uint8Array.__proto__;
+    const BASE64_INT_TO_CODE = [
+      'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R',
+      'S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j',
+      'k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1',
+      '2','3','4','5','6','7','8','9','+','/',];
+    exports.Base64Encoder = class Base64Encoder
+        extends Converter__FT(TypedArray, String) {
+      constructor() { super(); }
+      convert(value) {
+        let realArray = new Uint8Array(value.buffer);
+        let tick = 0;
+        let remainder = 0;
+        let result = '';
+        let addCodepoint = (codepoint) => {
+          let val;
+          remainder |= codepoint;
+          switch (tick) {
+            case 0:
+              val = (remainder & 0xfc) >> 2;
+              remainder = (remainder & 0x03) << 8;
+              result += BASE64_INT_TO_CODE[val];
+              tick = 1;
+              break;
+            case 1:
+              val = (remainder & 0x3f0) >> 4;
+              remainder = (remainder & 0x0f) << 8;
+              result += BASE64_INT_TO_CODE[val];
+              tick = 2;
+              break;
+            case 2:
+              val = (remainder & 0xfc0) >> 6;
+              result += BASE64_INT_TO_CODE[val];
+              val = (remainder & 0x3f);
+              result += BASE64_INT_TO_CODE[val];
+              tick = 0;
+              break;
+            default:
+              core.assert(() => false, "Assert not reached");
+          }
+        }
+        for (let codepoint of realArray) {
+          addCodepoint(codepoint);
+        }
+        if (tick != 0) {
+          addCodepoint(0);
+          if (tick == 0) {
+            result += '=';
+          } else {
+            result += '=='
+          }
+        }
+        return result;
+      }
+    }
 
     const CONVERTER_A_FIELD = Symbol('_converterA');
     const CONVERTER_B_FIELD = Symbol('_converterB');
@@ -146,7 +201,6 @@ define('convert', ['core'], function(core) {
         super();
         this.message = message;
       }
-
     }
     return exports;
 
