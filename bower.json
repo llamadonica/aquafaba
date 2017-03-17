@@ -1,0 +1,14 @@
+{
+  "name": "aquafava",
+  "version": "0.0.1",
+  "authors": [
+    "Adam Stark <llamadonica@gmail.com>"
+  ],
+  "license": "https://polymer.github.io/LICENSE.txt",
+  "dependencies": {
+    "imd": "PolymerLabs/IMD#^1.0.0"
+  },
+  "devDependencies": {
+    "web-component-tester": "^6.0.0-prerelease.5"
+  }
+}
