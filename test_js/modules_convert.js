@@ -69,9 +69,14 @@ define(['convert'], function (convert) {
       done();
     });
     test('Encodes base64', (done) => {
-      let stringToBase64Encoder = new convert.Utf8Encoder(new convert.Base64Encoder());
+      let stringToBase64Encoder = new convert.Utf8Encoder().fuse(new convert.Base64Encoder());
       assert.equal(stringToBase64Encoder.convert('any carnal pleasure'), 'YW55IGNhcm5hbCBwbGVhc3VyZQ==');
       done();
     });
+    test('Decodes base64', (done) => {
+      let stringToBase64Decoder = new convert.Base64Decoder().fuse(new convert.Utf8Decoder());
+      assert.equal(stringToBase64Decoder.convert('YW55IGNhcm5hbCBwbGVhc3VyZQ=='), 'any carnal pleasure');
+      done();
+    })
   });
 });

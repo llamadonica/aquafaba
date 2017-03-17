@@ -161,6 +161,7 @@ define('convert', ['core'], function(core) {
               result += BASE64_INT_TO_CODE[val];
               val = (remainder & 0x3f);
               result += BASE64_INT_TO_CODE[val];
+              remainder = 0;
               tick = 0;
               break;
             default:
@@ -180,7 +181,66 @@ define('convert', ['core'], function(core) {
         }
         return result;
       }
-    }
+    };
+
+    exports.Base64Decoder = class Base64Decoder
+        extends Converter__FT(String, TypedArray) {
+      constructor() { super(); }
+      static get BASE64_CODE_TO_INT() {
+        return core.lazyGet(() => {
+          let i = 0;
+          let result = {};
+          for (let codepoint of BASE64_INT_TO_CODE) {
+            result[codepoint] = i++;
+          }
+          return result;
+        })();
+      }
+      /**
+       * Converts a base64 encoded string to a corresponding typed array.
+       *
+       * @param {string} value
+       *
+       * @returns {TypedArray}
+       */
+      convert(value) {
+        let result = [];
+        let round = 0;
+        let currentNumber = 0;
+        for (let i = 0; i < value.length; i++) {
+          let char = value.substr(i, 1);
+          let charIndex = exports.Base64Decoder.BASE64_CODE_TO_INT[char];
+          if (char == '=' ) {
+            if (round != 0 && round < 4) {
+              currentNumber <<= ((4 - round)*6);
+              if (round == 3) {
+                result.push(
+                  ((currentNumber >> 16) & 0xff),
+                  ((currentNumber >> 8) & 0xff));
+              } else if (round == 2) {
+                result.push(
+                  ((currentNumber >> 16) & 0xff));
+              } else {
+                throw new DecoderException('Inappropriate place for padding');
+              }
+              currentNumber = 0;
+            }
+            round = 0;
+          } else if (charIndex != null) {
+            currentNumber = (currentNumber << 6) | charIndex;
+            if (++round == 4) {
+              round = 0;
+              result.push(
+                ((currentNumber >> 16) & 0xff),
+                ((currentNumber >> 8) & 0xff),
+                (currentNumber & 0xff));
+              currentNumber = 0;
+            }
+          }
+        }
+        return new Uint8Array(result);
+      }
+    };
 
     const CONVERTER_A_FIELD = Symbol('_converterA');
     const CONVERTER_B_FIELD = Symbol('_converterB');

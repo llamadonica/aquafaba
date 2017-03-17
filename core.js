@@ -160,6 +160,15 @@ define('core', [], function () {
       static get name() { return 'String'; }
     }
   };
+  exports.lazyGet = (fn) => {
+    let value;
+    return () => {
+      if (value === undefined) {
+        value = fn();
+      }
+      return value;
+    }
+  };
   exports.runtimeType = (obj) => {
     if (obj == null) return exports.types.Null;
     if (typeof obj === 'number') {
