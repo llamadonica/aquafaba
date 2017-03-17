@@ -1,16 +1,19 @@
 {
-  "extends": ["eslint:recommended", "google"],
+  "parserOptions": {
+    "ecmaVersion": 6
+  },
+  "extends": ["eslint:recommended"],
+  "es6": true,
   "env": {
-    "browser": true
+    "browser": true,
+    "es6": true,
+    "amd": true,
+    "mocha": true
   },
   "plugins": [
     "html"
   ],
-  "rules": {
-    "no-var": "off",
-    "new-cap": ["error", { "capIsNewExceptions": ["Polymer"] }]
-  },
   "globals": {
-    "Polymer": true
+    "assert": true
   }
 }

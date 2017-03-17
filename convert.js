@@ -1,5 +1,5 @@
 define('convert', ['core'], function(core) {
-  let exports = {};
+  var exports = {};
   const F = Symbol('_F');
   const T = Symbol('_T');
 
@@ -144,7 +144,7 @@ define('convert', ['core'], function(core) {
     class DecoderException extends core.Object {
       constructor(message) {
         super();
-        this.message = messsage;
+        this.message = message;
       }
 
     }

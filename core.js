@@ -6,9 +6,7 @@
 define('core', [], function () {
   var exports = {};
 
-  const RUNTIME_TYPE = Symbol('_extensionType');
   const HASH_CODE = Symbol('_hashCode');
-  const STATIC_TYPE = Symbol('_staticType');
   const TYPE_INFO = Symbol('_typeInfo');
   const SUPERTYPES = Symbol('_supertypes');
 
@@ -43,13 +41,8 @@ define('core', [], function () {
       var supertypes = [];
       _buildTypeHelper(target, new WeakSet(), supertypes);
       typeInfo = target[TYPE_INFO] = new _StaticTypeInfo(supertypes);
-      if (!target.$isSubtypeOf) {
-        target.$isSubtypeOf = (obj, _) => {
-
-        }
-      }
       if (!target.$isInstanceOf) {
-        target.$isInstanceOf = (obj, _) => {
+        target.$isInstanceOf = (obj) => {
           if (!(obj instanceof _Object)) return false;
           for (let implementedType of obj.runtimeType[TYPE_INFO][SUPERTYPES]) {
             if (implementedType == target) return true;
@@ -115,7 +108,6 @@ define('core', [], function () {
   exports.makeGenericType = (fn) => {
     let typeMap = new WeakMap();
     let onlyType;
-    let definingInstance = fn;
     return (...typeArgs) => {
       let currentMap = typeMap;
       for (var i = 0; i < fn.length - 1; i++) {
@@ -134,35 +126,35 @@ define('core', [], function () {
         }
         return finalType;
       } else {
-        return !!onlyType ? onlyType : fn.apply(this, typeArgs);
+        return onlyType ? onlyType : fn.apply(this, typeArgs);
       }
     }
   };
   exports.types = {
     any: class extends _Object {
-      static $isInstanceOf(obj, _) { return true; }
+      static $isInstanceOf() { return true; }
       static get name() { return 'any'; }
     },
     Null: class extends _Object {
-      static $isInstanceOf(obj, _) {
+      static $isInstanceOf(obj) {
         return obj == null;
       }
       static get name() { return 'Null'; }
     },
     int: class extends _Object {
-      static $isInstanceOf(obj, _) {
+      static $isInstanceOf(obj) {
         return (typeof obj === 'number' && obj|0 == obj);
       }
       static get name() { return 'int'; }
     },
     double: class extends _Object {
-      static $isInstanceOf (obj, _) {
+      static $isInstanceOf (obj) {
         return (typeof obj === 'number');
       }
       static get name() { return 'double'; }
     },
     String: class extends _Object {
-      static $isInstanceOf (obj, _) {
+      static $isInstanceOf (obj) {
         return (typeof obj === 'string');
       }
       static get name() { return 'String'; }
