@@ -108,20 +108,25 @@ define('core', [], function () {
   exports.makeGenericType = (fn) => {
     let typeMap = new WeakMap();
     let onlyType;
+    let realTypeArgs = [];
     return (...typeArgs) => {
       let currentMap = typeMap;
       for (var i = 0; i < fn.length - 1; i++) {
-        currentMap = currentMap[typeArgs[i]];
+        let reifiedType = exports.reifyType(typeArgs[i]);
+        realTypeArgs.push(reifiedType);
+        currentMap = currentMap[reifiedType];
         if (!currentMap) {
-          typeMap[typeArgs] = currentMap = new WeakMap();
+          typeMap[reifiedType] = currentMap = new WeakMap();
         }
       }
       if (fn.length > 0) {
-        let finalType = currentMap[typeArgs[fn.length - 1]];
+        let reifiedType = exports.reifyType(typeArgs[i]);
+        realTypeArgs.push(reifiedType);
+        let finalType = currentMap[reifiedType];
         if (!finalType) {
-          currentMap[typeArgs[fn.length - 1]] = finalType = fn.apply(fn, typeArgs);
+          currentMap[reifiedType] = finalType = fn.apply(fn, typeArgs);
           finalType.$isGeneric = true;
-          finalType.$typeArguments = typeArgs.slice(0);
+          finalType.$typeArguments = realTypeArgs;
           finalType.$classDefinition = fn;
         }
         return finalType;
@@ -168,6 +173,11 @@ define('core', [], function () {
       }
       return value;
     }
+  };
+  exports.reifyType = (fn) => {
+    if (fn == Number) return exports.types.double;
+    if (fn == String) return exports.types.String;
+    return fn;
   };
   exports.runtimeType = (obj) => {
     if (obj == null) return exports.types.Null;
