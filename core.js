@@ -3,6 +3,37 @@
  * Copyright (c) 2017 Adam Stark. All rights reserved.
  * This code may only be used under the BSD style license found at LICENSE.txt
  */
+(() => {
+  // Polymer is officially supported on IE11, so here's a quick little
+  // polyfill.
+  let ix = 0;
+  function lazyGet(fn) {
+    let value;
+    return () => {
+      if (value === undefined) {
+        value = fn();
+      }
+      return value;
+    }
+  }
+  class _SymbolPolyfill {
+    constructor(str, ix) {
+      this.str = str;
+      this.ix = ix;
+      this.constructor = Symbol;
+    }
+    static make(str) {
+      return new _SymbolPolyfill(str, ix++);
+    }
+    static get iterator() {
+      return lazyGet(() => Symbol('iterator'))();
+    }
+    toString() {
+      return `##Symbol#${this.str}#${this.ix}`
+    }
+  }
+  Symbol = Symbol || _SymbolPolyfill.make;
+})();
 define('core', [], function () {
   var exports = {};
 
@@ -41,8 +72,26 @@ define('core', [], function () {
       var supertypes = [];
       _buildTypeHelper(target, new WeakSet(), supertypes);
       typeInfo = target[TYPE_INFO] = new _StaticTypeInfo(supertypes);
-      if (!target.$isInstanceOf) {
-        target.$isInstanceOf = (obj) => {
+      if (!target.$isSubtypeOf) {
+        target.$isSubtypeOf = (typeOther) => {
+          typeOther = exports.reifyType(typeOther);
+          for (let implementedType of target.runtimeType[TYPE_INFO][SUPERTYPES]) {
+            if (implementedType == target) return true;
+          }
+          return false;
+        }
+      }
+      if (!target.$isSupertypeOf) {
+        target.$isSupertypeOf = (typeOther) => {
+          typeOther = exports.reifyType(typeOther);
+          if (_isSubtypeOfObject(typeOther)) {
+            return typeOther.$isSubtypeOf(target);
+          }
+          return false;
+        }
+      }
+      if (!target.$doesObjectImplement) {
+        target.$doesObjectImplement = (obj) => {
           if (!(obj instanceof _Object)) return false;
           for (let implementedType of obj.runtimeType[TYPE_INFO][SUPERTYPES]) {
             if (implementedType == target) return true;
@@ -57,8 +106,8 @@ define('core', [], function () {
   class _Object {
     constructor() {
       this[HASH_CODE] = null;
-      var typeInfo = _buildType(new.target);
-      typeInfo.doAllChecks(this, new.target);
+      var typeInfo = _buildType(this.constructor);
+      typeInfo.doAllChecks(this, this.constructor);
     }
 
 
@@ -68,7 +117,7 @@ define('core', [], function () {
     isInstanceOf(type) {
       if (_isSubtypeOfObject(type)) {
         _buildType(type);
-        return type.$isInstanceOf(this, type);
+        return type.$doesObjectImplement(this, type);
       }
       return (this instanceof type);
     }
@@ -87,12 +136,15 @@ define('core', [], function () {
     static toString() { return this.name; }
     toString() { return `Instance of ${this.runtimeType}` }
   }
-  function _isSubtypeOfObject(type) {
+  function _isJSSubtypeOfType(type, supertype) {
     while (type) {
-      if (type == _Object) return true;
+      if (type == supertype) return true;
       type = type.__proto__;
     }
     return false;
+  }
+  function _isSubtypeOfObject(type) {
+    return _isJSSubtypeOfType(type, _Object);
   }
   class _AssertionException extends _Object {
     constructor(message) {
@@ -135,36 +187,69 @@ define('core', [], function () {
       }
     }
   };
-  exports.types = {
-    any: class extends _Object {
-      static $isInstanceOf() { return true; }
-      static get name() { return 'any'; }
-    },
-    Null: class extends _Object {
-      static $isInstanceOf(obj) {
-        return obj == null;
-      }
-      static get name() { return 'Null'; }
-    },
-    int: class extends _Object {
-      static $isInstanceOf(obj) {
-        return (typeof obj === 'number' && obj|0 == obj);
-      }
-      static get name() { return 'int'; }
-    },
-    double: class extends _Object {
-      static $isInstanceOf (obj) {
-        return (typeof obj === 'number');
-      }
-      static get name() { return 'double'; }
-    },
-    String: class extends _Object {
-      static $isInstanceOf (obj) {
-        return (typeof obj === 'string');
-      }
-      static get name() { return 'String'; }
+
+  let VALUE_INTERCEPTORS = Symbol('_valueInterceptors');
+  let CLASS_INTERCEPTORS = Symbol('_classInterceptors');
+  let CACHED_TYPES = Symbol('_cachedTypes');
+  class _TypeInterceptor {
+    constructor() {
+      this[CACHED_TYPES] = {};
+      this[VALUE_INTERCEPTORS] = [];
+      this[CLASS_INTERCEPTORS] = [];
     }
-  };
+    get any() {
+      return exports.lazyGet(() => {
+        return class extends _Object {
+          static $doesObjectImplement() { return true; }
+          static get name() { return 'any'; }
+        };
+      })();
+    }
+    get Null() {
+      return exports.lazyGet(() => {
+        return class extends _Object {
+          static $doesObjectImplement(obj) {
+            return obj == null;
+          }
+          static $isSubtypeOf() {
+            return true;
+          }
+          static get name() { return 'Null'; }
+        };
+      })();
+    }
+    get int() {
+      return exports.lazyGet(() => {
+        return class extends _Object {
+          static $doesObjectImplement(obj) {
+            return (typeof obj === 'number' && obj|0 == obj);
+          }
+          static get name() { return 'int'; }
+        };
+      })();
+    }
+    get double() {
+      return exports.lazyGet(() => {
+        return class extends _Object {
+          static $doesObjectImplement (obj) {
+            return (typeof obj === 'number');
+          }
+          static get name() { return 'double'; }
+        };
+      })();
+    }
+    get String() {
+      return exports.lazyGet(() => {
+        return class extends _Object {
+          static $doesObjectImplement (obj) {
+            return (typeof obj === 'string');
+          }
+          static get name() { return 'String'; }
+        };
+      })();
+    }
+  }
+  exports.types = new _TypeInterceptor();
   exports.lazyGet = (fn) => {
     let value;
     return () => {
@@ -192,9 +277,24 @@ define('core', [], function () {
     return obj.constructor;
   };
   exports.isInstanceOf = (obj, type) => {
+    type = exports.reifyType(type);
     if (obj instanceof _Object) return obj.isInstanceOf(type);
-    if (type.$isInstanceOf) return type.$isInstanceOf(obj, type);
+    if (_isSubtypeOfObject(type)) return type.$doesObjectImplement(obj, type);
     return obj instanceof type;
+  };
+  exports.as = (obj, type) => {
+    if (!exports.isInstanceOf(obj, type))
+      throw new TypeError(`Object [${obj}] was not an instance of ${type}`);
+    return obj;
+  };
+  exports.StateError = class StateError extends _Object {
+    constructor(message) {
+      super();
+      this.message = message;
+    }
+    toString() {
+      return `Bad State: ${this.message}`;
+    }
   }
 
 

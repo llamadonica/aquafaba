@@ -23,7 +23,7 @@ define('convert', ['core'], function(core) {
     baseClass = class extends Converter {
       constructor() {
         super();
-        if (new.target === baseClass) {
+        if (this.constructor === baseClass) {
           throw new TypeError(
             "Converter is abstract and can't be called directly");
         }
