@@ -32,7 +32,7 @@
       return `##Symbol#${this.str}#${this.ix}`
     }
   }
-  Symbol = Symbol || _SymbolPolyfill.make;
+  Symbol = Symbol || _SymbolPolyfill.make; // eslint-disable-line no-global-assign
 })();
 define('core', [], function () {
   var exports = {};
@@ -76,7 +76,7 @@ define('core', [], function () {
         target.$isSubtypeOf = (typeOther) => {
           typeOther = exports.reifyType(typeOther);
           for (let implementedType of target.runtimeType[TYPE_INFO][SUPERTYPES]) {
-            if (implementedType == target) return true;
+            if (implementedType == typeOther) return true;
           }
           return false;
         }
