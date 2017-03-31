@@ -191,10 +191,10 @@ define('iterables', ['core'], (core) => {
         this[T] = t;
         this[INNER_ARRAY] = values ? values.slice(0) : [];
       }
-      getOperator(index) {
+      [core.getOperator](index) {
         return this[INNER_ARRAY][index];
       }
-      setOperator(index, value) {
+      [core.setOperator](index, value) {
         this[INNER_ARRAY][index] = value;
       }
     }

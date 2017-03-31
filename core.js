@@ -296,6 +296,8 @@ define('core', [], function () {
       return `Bad State: ${this.message}`;
     }
   }
+  exports.getOperator = Symbol('operator[]');
+  exports.setOperator = Symbol('operator[]=');
 
 
   return exports;

@@ -3,7 +3,7 @@
  * Copyright (c) 2017 Adam Stark. All rights reserved.
  * This code may only be used under the BSD style license found at LICENSE.txt
  */
-define('guid', [], function () {
+define('uuid', [], function () {
   let exports = {};
   exports.guid = () => {
     function s4() {
