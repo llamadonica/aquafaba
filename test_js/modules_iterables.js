@@ -22,6 +22,7 @@ define(['iterables', 'core'], function (iterables, core) {
     test('Can create a list', (done) => {
       var list = new (iterables.List__T(core.types.int))([1,2,3]);
       assert.equal(list[core.getOperator](0), 1);
+      done();
     })
   });
 });
