@@ -25,4 +25,5 @@ define('uuid', [], function () {
     return s4() + s4() + '-' + s4() + '-4' + s3() + '-' +
            s35() + '-' + s4() + s4() + s4();
   };
+  return exports;
 });
