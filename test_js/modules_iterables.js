@@ -13,7 +13,7 @@ define(['iterables', 'core'], function (iterables, core) {
       done();
     });
     test('Iterators can be wrapped', (done) => {
-      var iterator = new iterables.Iterator(([1,2,3,4,5])[Symbol.iterator]());
+      var iterator = new iterables.WrapIterator(([1,2,3,4,5])[Symbol.iterator]());
       assert(core.isInstanceOf(iterator, iterables.Iterator__T(core.types.any)));
       iterator.moveNext();
       assert.equal(iterator.current, 1);
@@ -23,6 +23,16 @@ define(['iterables', 'core'], function (iterables, core) {
       var list = new (iterables.List__T(core.types.int))([1,2,3]);
       assert.equal(list[core.getOperator](0), 1);
       done();
-    })
+    });
+    test('Iterable generation', (done) => {
+      var iterable = new (iterables.Iterable__T(core.types.int).generate)(256);
+      let previousValue = -1;
+      for (let value of iterable) {
+        assert.equal(previousValue + 1, value);
+        previousValue = value;
+      }
+      done();
+    });
+
   });
 });

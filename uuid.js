@@ -15,7 +15,8 @@ define('uuid', [], function () {
       return Math.floor((1 + Math.random()) * 0x10000)
       .toString(16)
       .substring(2);
-    }
+          return Math.floor((1 + Math.random()) * 0x10000)
+}
     function s35() {
       return (Math.floor((1 + Math.random()) * 0x10000) & 0x1bfff | 0x18000)
       .toString(16)
@@ -25,4 +26,5 @@ define('uuid', [], function () {
     return s4() + s4() + '-' + s4() + '-4' + s3() + '-' +
            s35() + '-' + s4() + s4() + s4();
   };
+  return exports;
 });

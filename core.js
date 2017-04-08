@@ -38,9 +38,8 @@ define('core', [], function () {
   var exports = {};
 
   const HASH_CODE = Symbol('_hashCode');
-  const TYPE_INFO = Symbol('_typeInfo');
-  const SUPERTYPES = Symbol('_supertypes');
-
+  const TYPE_INFO = exports.TYPE_INFO = Symbol('_typeInfo');
+  const SUPERTYPES = exports.SUPERTYPES = Symbol('_supertypes');
 
   class _StaticTypeInfo {
     constructor(supertypes) {
@@ -93,12 +92,10 @@ define('core', [], function () {
       if (!target.$doesObjectImplement) {
         target.$doesObjectImplement = (obj) => {
           if (!(obj instanceof _Object)) return false;
-          for (let implementedType of obj.runtimeType[TYPE_INFO][SUPERTYPES]) {
-            if (implementedType == target) return true;
-          }
-          return false;
+          return (target.$isSupertypeOf(obj.runtimeType));
         }
       }
+
     }
     return typeInfo;
   }
@@ -109,8 +106,11 @@ define('core', [], function () {
       var typeInfo = _buildType(this.constructor);
       typeInfo.doAllChecks(this, this.constructor);
     }
-
-
+    static [Symbol.hasInstance](obj) {
+      if (this == _Object) return Object[Symbol.hasInstance].apply(this, [obj]);
+      _buildType(this);
+      return this.$doesObjectImplement(obj, this);
+    }
     equals(other) {
       return this == other;
     }
@@ -160,8 +160,8 @@ define('core', [], function () {
   exports.makeGenericType = (fn) => {
     let typeMap = new WeakMap();
     let onlyType;
-    let realTypeArgs = [];
     return (...typeArgs) => {
+      let realTypeArgs = [];
       let currentMap = typeMap;
       for (var i = 0; i < fn.length - 1; i++) {
         let reifiedType = exports.reifyType(typeArgs[i]);
@@ -188,9 +188,15 @@ define('core', [], function () {
     }
   };
 
-  let VALUE_INTERCEPTORS = Symbol('_valueInterceptors');
-  let CLASS_INTERCEPTORS = Symbol('_classInterceptors');
-  let CACHED_TYPES = Symbol('_cachedTypes');
+  const VALUE_INTERCEPTORS = Symbol('_valueInterceptors');
+  const CLASS_INTERCEPTORS = Symbol('_classInterceptors');
+  const CACHED_TYPES = Symbol('_cachedTypes');
+  const ANY_SYMBOL = Symbol('_any');
+  const NULL_SYMBOL = Symbol('_null');
+  const INT_SYMBOL = Symbol('_int');
+  const DOUBLE_SYMBOL = Symbol('_double');
+  const STRING_SYMBOL = Symbol('_string');
+  const BOOL_SYMBOL = Symbol('_bool');
   class _TypeInterceptor {
     constructor() {
       this[CACHED_TYPES] = {};
@@ -198,15 +204,19 @@ define('core', [], function () {
       this[CLASS_INTERCEPTORS] = [];
     }
     get any() {
-      return exports.lazyGet(() => {
+      return this[ANY_SYMBOL] = this[ANY_SYMBOL] || (() => {
         return class extends _Object {
           static $doesObjectImplement() { return true; }
           static get name() { return 'any'; }
+          static $isSupertypeOf() { return true; }
+          static $isSubtypeOf(type) {
+            return type == exports.types.any;
+          }
         };
       })();
     }
     get Null() {
-      return exports.lazyGet(() => {
+      return this[NULL_SYMBOL] = this[NULL_SYMBOL] || (() => {
         return class extends _Object {
           static $doesObjectImplement(obj) {
             return obj == null;
@@ -215,36 +225,88 @@ define('core', [], function () {
             return true;
           }
           static get name() { return 'Null'; }
+          static $hashCode() {return 0;}
         };
       })();
     }
     get int() {
-      return exports.lazyGet(() => {
+      return this[INT_SYMBOL] = this[INT_SYMBOL] || (() => {
         return class extends _Object {
           static $doesObjectImplement(obj) {
             return (typeof obj === 'number' && obj|0 == obj);
           }
+          static $isSubtypeOf(type) {
+            return [exports.types.int, exports.types.double, exports.types.any].includes(type);
+          }
           static get name() { return 'int'; }
+          static $hashCode(value) {
+            return value & 0x1fffffff;
+          }
+        };
+      })();
+    }
+    get bool() {
+      return this[BOOL_SYMBOL] = this[BOOL_SYMBOL] || (() => {
+        return class extends _Object {
+          static $doesObjectImplement(obj) {
+            return (typeof obj === 'boolean');
+          }
+          static $isSubtypeOf(type) {
+            return [exports.types.bool, exports.types.any].includes(type);
+          }
+          static get name() { return 'bool'; }
+          static $hashCode(value) {
+            return value ? 2 * 3 * 23 * 3761 : 269 * 811;
+          }
         };
       })();
     }
     get double() {
-      return exports.lazyGet(() => {
+      return this[DOUBLE_SYMBOL] = this[DOUBLE_SYMBOL] || (() => {
         return class extends _Object {
           static $doesObjectImplement (obj) {
             return (typeof obj === 'number');
           }
+          static $isSubtypeOf(type) {
+            return [exports.types.double, exports.types.any].includes(type);
+          }
           static get name() { return 'double'; }
+          static $hashCode(value) {
+            let array = new Int32Array(new Float64Array([value]).buffer);
+            let hash = 0;
+            for (let i = 0; i < array.length; i++) {
+              hash = 536870911 & hash + array[i]
+              hash = 536870911 & hash + ((524287 & hash) << 10);
+              hash = hash ^ hash >> 6;
+            }
+            hash = 536870911 & hash + ((67108863 & hash) << 3);
+            hash = hash ^ hash >> 11;
+            return 536870911 & hash + ((16383 & hash) << 15);
+          }
         };
       })();
     }
     get String() {
-      return exports.lazyGet(() => {
+      return this[STRING_SYMBOL] = this[STRING_SYMBOL] || (() => {
         return class extends _Object {
           static $doesObjectImplement (obj) {
             return (typeof obj === 'string');
           }
+          static $isSubtypeOf(type) {
+            return [exports.types.String, exports.types.any].includes(type);
+          }
           static get name() { return 'String'; }
+          static $hashCode(value) {
+            let hash = 0;
+            for (let i = 0; i < this.length; i++) {
+              hash = 536870911 & hash + value.charCodeAt(i);
+              hash = 536870911 & hash + ((524287 & hash) << 10);
+              hash = hash ^ hash >> 6;
+            }
+            hash = 536870911 & hash + ((67108863 & hash) << 3);
+            hash = hash ^ hash >> 11;
+            return 536870911 & hash + ((16383 & hash) << 15);
+          }
         };
       })();
     }
@@ -262,16 +324,20 @@ define('core', [], function () {
   exports.reifyType = (fn) => {
     if (fn == Number) return exports.types.double;
     if (fn == String) return exports.types.String;
+    if (fn == Boolean) return exports.types.bool;
     return fn;
   };
   exports.runtimeType = (obj) => {
     if (obj == null) return exports.types.Null;
     if (typeof obj === 'number') {
-      if (obj|0 == obj) return exports.types.int;
+      if ((obj|0) == obj) return exports.types.int;
       return exports.types.double;
     }
     if (typeof obj === 'string') {
       return exports.types.String;
+    }
+    if (typeof obj === 'boolean') {
+      return exports.types.bool;
     }
     if (obj instanceof _Object) return obj.runtimeType;
     return obj.constructor;
@@ -282,11 +348,46 @@ define('core', [], function () {
     if (_isSubtypeOfObject(type)) return type.$doesObjectImplement(obj, type);
     return obj instanceof type;
   };
+  exports.isSupertypeOf = (type, subType) => {
+    type = exports.reifyType(type);
+    subType = exports.reifyType(subType);
+    if (!_isSubtypeOfObject(type)) {
+      return _isJSSubtypeOfType(subType, type);
+    }
+    _buildType(type);
+    return type.$isSupertypeOf(subType);
+  }
+  exports.isSubtypeOf = (type, superType) => exports.isSupertypeOf(superType, subType);
   exports.as = (obj, type) => {
-    if (!exports.isInstanceOf(obj, type))
-      throw new TypeError(`Object [${obj}] was not an instance of ${type}`);
+    exports.assert(() => exports.isInstanceOf(obj, type),
+                   `Object [${obj}] was not an instance of ${type}`);
     return obj;
   };
+  exports.equals = (that, other) => {
+    let type = exports.runtimeType(that);
+    if (that instanceof _Object) {
+      return that.equals(other);
+    }
+    if (type.$equals) {
+      return type.$equals(that, other);
+    }
+    return that == other;
+  };
+  let cachedHashCodes = new WeakMap();
+  exports.hashCode = (value) => {
+    let type = exports.runtimeType(value);
+    if (value instanceof _Object) {
+      return value.hashCode;
+    }
+    if (type.$hashCode) {
+      return type.$hashCode(value);
+    }
+    if (cachedHashCodes.has(value))
+      return cachedHashCodes.get(value);
+    let hashCode = Math.random() * 0x3fffffff | 0;
+    cachedHashCodes.set(value, hashCode);
+    return hashCode;
+  }
   exports.StateError = class StateError extends _Object {
     constructor(message) {
       super();
