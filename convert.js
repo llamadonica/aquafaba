@@ -1,56 +1,17 @@
 define('convert', ['core'], function(core) {
   var exports = {};
-  const F = Symbol('_F');
-  const T = Symbol('_T');
 
-
-  var Converter = exports.Converter = class Converter extends core.Object {
+  var Converter = exports.Converter = class Converter extends Object {
     constructor() {
       super();
     }
-    static check(obj, target) {
-      core.assert(() => target !== Converter,
-      "Converter is abstract and can't be called directly");
-      core.assert(() => obj.convert !== undefined,
-      "Converter must implement `convert` function");
-      core.assert(() => obj.fuse !== undefined,
-      "Converter must implement `fuse` function");
+    fuse(otherConverter) {
+      return new _FusedConverter(this, otherConverter);
     }
   };
 
-  let Converter__FT = core.makeGenericType((f,t) => {
-    var baseClass;
-    baseClass = class extends Converter {
-      constructor() {
-        super();
-        if (this.constructor === baseClass) {
-          throw new TypeError(
-            "Converter is abstract and can't be called directly");
-        }
-      }
-      static check(obj) {
-        obj[F] = f;
-        obj[T] = t;
-        if (obj.convert === undefined) {
-          throw new TypeError("Converter must implement `convert` function");
-        }
-      }
-      fuse(otherConverter) {
-        if (this[F] != otherConverter[T]) {
-          throw new TypeError(
-              `${this[F]} was not a ${otherConverter[T]} in fuse`);
-        }
-        return new (
-            _FusedConverter__FT(
-                this[F], otherConverter[T]))(this, otherConverter);
-      }
-    }
-    return baseClass;
-  });
-  exports.Converter__FT = Converter__FT;
-
   exports.Utf8Encoder = class Utf8Encoder
-      extends Converter__FT(String, Uint8Array) {
+      extends Converter {
     convert(value) {
       let utf8 = [];
       for (let i=0; i < value.length; i++) {
@@ -81,7 +42,7 @@ define('convert', ['core'], function(core) {
   };
 
   exports.Utf8Decoder = class Utf8Decoder
-      extends Converter__FT(Uint8Array, String) {
+      extends Converter {
     convert(value, tolerant = false) {
       let stringResult = '';
       let iterator = value[Symbol.iterator]();
@@ -127,14 +88,13 @@ define('convert', ['core'], function(core) {
       return stringResult;
     }
   };
-  let TypedArray = Uint8Array.__proto__;
   const BASE64_INT_TO_CODE = [
     'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R',
     'S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j',
     'k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1',
     '2','3','4','5','6','7','8','9','+','/',];
   exports.Base64Encoder = class Base64Encoder
-      extends Converter__FT(TypedArray, String) {
+      extends Converter {
     constructor() { super(); }
     convert(value) {
       let realArray = new Uint8Array(value.buffer);
@@ -185,7 +145,7 @@ define('convert', ['core'], function(core) {
   };
 
   exports.Base64Decoder = class Base64Decoder
-      extends Converter__FT(String, TypedArray) {
+      extends Converter {
     constructor() { super(); }
     static get BASE64_CODE_TO_INT() {
       return core.lazyGet(() => {
@@ -246,7 +206,7 @@ define('convert', ['core'], function(core) {
   const CONVERTER_A_FIELD = Symbol('_converterA');
   const CONVERTER_B_FIELD = Symbol('_converterB');
 
-  let _FusedConverter__FT = (f,t) => class extends Converter__FT(f,t) {
+  let _FusedConverter = class extends Converter {
     constructor(converterA, converterB) {
       super();
       this[CONVERTER_A_FIELD] = converterA;
@@ -257,7 +217,7 @@ define('convert', ['core'], function(core) {
     }
   };
 
-  class DecoderException extends core.Object {
+  class DecoderException extends Object {
     constructor(message) {
       super();
       this.message = message;
