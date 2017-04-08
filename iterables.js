@@ -31,6 +31,15 @@ define('iterables', ['core'], (core) => {
           }
         });
     }
+    static generateInfinite(fn = (val) => val) {
+      return new (IterableMixin(WrapIterableBase))(
+        function* () {
+          let i = 0;
+          for (;;) {
+            yield fn(i++);
+          }
+        });
+    }
   }
 
   let IterableException = exports.IterableException = class IterableException {
@@ -43,6 +52,7 @@ define('iterables', ['core'], (core) => {
   };
 
   let _DELEGATE = Symbol('_delegate');
+  let _FILTER_BASE = Symbol('_filterBase');
   let WrapIterableBase = exports.WrapIterableBase = class WrapIterableBase {
     constructor(delegate) {
       this[_DELEGATE] = delegate;
@@ -74,6 +84,9 @@ define('iterables', ['core'], (core) => {
           }
           return value;
         }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
+        }
       };
     }
     if (!core.classHasProperty(p,'isEmpty')) {
@@ -83,6 +96,9 @@ define('iterables', ['core'], (core) => {
           let {done} = iterator.next();
           return done;
         }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
+        }
       };
     }
     if (!core.classHasProperty(p,'isNotEmpty')) {
@@ -91,6 +107,9 @@ define('iterables', ['core'], (core) => {
           let iterator = this[Symbol.iterator]();
           let {done} = iterator.next();
           return !done;
+        }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
         }
       };
     }
@@ -107,6 +126,9 @@ define('iterables', ['core'], (core) => {
           }
           return value;
         }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
+        }
       };
     }
     if (!core.classHasProperty(p, 'length')) {
@@ -121,11 +143,14 @@ define('iterables', ['core'], (core) => {
           }
           return i;
         }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
+        }
       };
     }
     if (!core.classHasProperty(p, 'singleValue')) {
       mixedin = class extends mixedin {
-        get last() {
+        get singleValue() {
           let iterator = this[Symbol.iterator]();
           let {value, done} = iterator.next();
           if (done) {
@@ -137,36 +162,44 @@ define('iterables', ['core'], (core) => {
           }
           return value;
         }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
+        }
       };
     }
+    if (!core.classHasMethod(p, 'firstOrDefault')) {
+      mixedin.prototype.firstOrDefault = function(callback, thisArg = undefined) {
+        let iterator = this[Symbol.iterator]();
+        let {value, done} = iterator.next();
+        if (done) {
+          return callback ? callback.apply(thisArg, []) : undefined;
+        }
+        return value;
+      };
+    }
+    if (!core.classHasMethod(p, _FILTER_BASE)) {
+      mixedin.prototype[_FILTER_BASE] = function(callback, thisArg = undefined) {
+        let outerThis = this;
+        return new (IterableMixin(WrapIterableBase))(function* () {
+          let i = 0;
+          for (let value of outerThis) {
+            if (callback.apply(thisArg, [value, i, this])) {
+              yield {value: value, index: i};
+            }
+            i++;
+          }
+        });
+      };
+    }
+
     if (!core.classHasMethod(p,'some')) {
       mixedin.prototype.some = function(callback, thisArg = undefined) {
-        let iterator = this[Symbol.iterator]();
-        let i = 0;
-        let {value, done} = iterator.next();
-        while (!done) {
-          if (callback.apply(thisArg, [value, i, this])) return true;
-          i++;
-          ({value, done} = iterator.next());
-        }
-        return false;
+        return this[_FILTER_BASE](callback, thisArg).isNotEmpty;
       };
     }
     if (!core.classHasMethod(p,'includes')) {
       mixedin.prototype.includes = function (searchElement, fromIndex = 0) {
-        let iterator = this[Symbol.iterator]();
-        let i = 0;
-        let {value, done} = iterator.next();
-        while (!done) {
-          if (i >= fromIndex) {
-            if (value == searchElement) {
-              return true;
-            }
-          }
-          i++;
-          ({value, done} = iterator.next());
-        }
-        return false;
+        return this.some((el, ix) => ix >= fromIndex && searchElement == el);
       };
     }
     if (!core.classHasMethod(p, core.getOperator)) {
@@ -184,6 +217,7 @@ define('iterables', ['core'], (core) => {
         return value;
       };
     }
+
     if (!core.classHasMethod(p, 'every')) {
       mixedin.prototype.every = function (callback, thisArg) {
         let iterator = this[Symbol.iterator]();
@@ -199,19 +233,7 @@ define('iterables', ['core'], (core) => {
     }
     if (!core.classHasMethod(p, 'indexOf')) {
       mixedin.prototype.indexOf = function (searchElement, fromIndex = 0) {
-        let iterator = this[Symbol.iterator]();
-        let i = 0;
-        let {value, done} = iterator.next();
-        while (!done) {
-          if (i >= fromIndex) {
-            if (value == searchElement) {
-              return i;
-            }
-          }
-          i++;
-          ({value, done} = iterator.next());
-        }
-        return -1;
+        return this[_FILTER_BASE]((el, ix) => ix >= fromIndex && el == searchElement).map((x) => x.index).firstOrDefault(() => -1);
       };
     }
     if (!core.classHasMethod(p,'join')) {
@@ -227,42 +249,24 @@ define('iterables', ['core'], (core) => {
         return buffer;
       };
     }
+
     if (!core.classHasMethod(p,'filter')) {
       mixedin.prototype.filter = function (callback, thisArg) {
-        return new (IterableMixin(WrapIterableBase))(function* () {
-          let i = 0;
-          for (let value of this) {
-            if (callback.apply(thisArg, [value, i, this])) {
-              yield value;
-            }
-            i++;
-          }
-        });
+        return this[_FILTER_BASE](callback, thisArg).map((x) => x.value);
       };
     }
     if (!core.classHasMethod(p, 'find')) {
       mixedin.prototype.find = function (callback, thisArg) {
-        let iterator = this[Symbol.iterator]();
-        let i = 0;
-        let {value, done} = iterator.next();
-        while (!done) {
-          if (callback.apply(thisArg, [value, i, this])) return value;
-          i++;
-          ({value, done} = iterator.next());
-        }
+        return this[_FILTER_BASE](callback, thisArg)
+            .map((x) => x.value)
+            .firstOrDefault(() => undefined);
       };
     }
     if (!core.classHasMethod(p, 'findIndex')) {
       mixedin.prototype.findIndex = function (callback, thisArg) {
-        let iterator = this[Symbol.iterator]();
-        let i = 0;
-        let {value, done} = iterator.next();
-        while (!done) {
-          if (callback.apply(thisArg, [value, i, this])) return i;
-          i++;
-          ({value, done} = iterator.next());
-        }
-        return -1;
+        return this[_FILTER_BASE](callback, thisArg)
+            .map((x) => x.index)
+            .firstOrDefault(() => -1);
       };
     }
     if (!core.classHasMethod(p, 'forEach')) {
@@ -299,13 +303,28 @@ define('iterables', ['core'], (core) => {
     }
     if (!core.classHasMethod(p,'map')) {
       mixedin.prototype.map = function (callback, thisArg) {
+        let outerThis = this;
         return new (IterableMixin(WrapIterableBase))(function* () {
           let i = 0;
-          for (let value of this) {
+          for (let value of outerThis) {
             yield callback.apply(thisArg, [value, i, this]);
             i++;
           }
         });
+      };
+    }
+    if (!core.classHasMethod(p,'compareLengthTo')) {
+      mixedin.prototype.compareLengthTo = function (n) {
+        let iterator = this[Symbol.iterator]();
+        let i = 0;
+        let {done} = iterator.next();
+        while (!done && i <= n) {
+          i++;
+          ({done} = iterator.next());
+        }
+        if (i < n) return -1;
+        if (i > n) return 1;
+        return 0;
       };
     }
     return mixedin;
