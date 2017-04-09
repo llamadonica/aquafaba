@@ -42,7 +42,7 @@ define('iterables', ['core'], (core) => {
     }
   }
 
-  let ConcurrentModificationException = exports.ConcurrentModificationException = class ConcurrentModificationException {
+  exports.ConcurrentModificationException = class ConcurrentModificationException {
     constructor(message) {
       this.message = message;
     }

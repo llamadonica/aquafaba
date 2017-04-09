@@ -109,7 +109,7 @@ define('core', [], function () {
   //    should be no more likely to collide than it would as a result
   //    of random chance.
   let _SALT = Symbol('_salt');
-  let HashSalt = exports.HashSalt = class HashSalt {
+  exports.HashSalt = class HashSalt {
     constructor() {
       this[_SALT] =  (Math.random() * 0x1fffffff)|0;
     }

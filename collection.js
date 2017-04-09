@@ -20,7 +20,6 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _REMOVE_AT = Symbol('_removeAt');
   const _GET_CELL_HASHABLE = Symbol('_getCellHashable');
   const _UPSERT = Symbol('_upsert');
-  const _CUCKOO = Symbol('_cuckoo');
   const _RESIZE = Symbol('_resze');
   const _MAX_BEFORE_RESIZE = Symbol('_maxBeforeResize');
 
@@ -118,8 +117,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
       for (;;) {
         this[_GET_CELL_OFFSET](hashable, true, insertSpec, butNot);
         if (insertSpec.update) {
-          let oldCell = this[_CELLS][ix];
-          this[_CELLS][enserSpec.ix] = cell;
+          let oldCell = this[_CELLS][insertSpec.ix];
+          this[_CELLS][insertSpec.ix] = cell;
           this[_REV]++;
           return oldCell;
         }
@@ -129,15 +128,15 @@ define('collection', ['core','iterables'], (core, iterables) => {
           this[_COUNT]++;
           return;
         }
-        if (cuckooAttemptsRemainin <= 0 || this[_COUNT] > this[_MAX_BEFORE_RESIZE]) {
+        if (cuckooAttemptsRemaining <= 0 || this[_COUNT] > this[_MAX_BEFORE_RESIZE]) {
           this[_RESIZE]();
           continue;
         }
         // We have to kick a neighbor out.
-        let oldCell = this[_CELLS][ix];
-        butNot = ix;
-        this[_CELLS][ix] = cell;
-        cuckooAttemptsRemainin--;
+        let oldCell = this[_CELLS][insertSpec.ix];
+        butNot = insertSpec.ix;
+        this[_CELLS][insertSpec.ix] = cell;
+        cuckooAttemptsRemaining--;
         cell = oldCell;
         hashable = this[_GET_CELL_HASHABLE](cell);
       }
@@ -202,13 +201,13 @@ define('collection', ['core','iterables'], (core, iterables) => {
       this[_FN] = fn;
     }
     [Symbol.iterator]() {
-      return new _CuckooHashCollectionIterator(map, fn);
+      return new _CuckooHashCollectionIterator(this[_MAP], this[_FN]);
     }
   }
   let _CuckooHashCollectionIterable =
     iterables.IterableMixin(_CuckooHashCollectionIterableBase);
   const _GEN_KVPAIR_CELL = Symbol('_genKVPair');
-  let HashMap = exports.HashMap = class HashMap extends _CuckooHashCollection {
+  exports.HashMap = class HashMap extends _CuckooHashCollection {
     constructor(sizeOrMap) {
       if (typeof sizeOrMap === 'undefined') {
         super();
@@ -216,6 +215,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
         super(sizeOrMap);
       } else if (sizeOrMap.size) {
         super(sizeOrMap.size);
+      } else {
+        super();
       }
       if (sizeOrMap && sizeOrMap.keys && sizeOrMap.get) {
         for (let key of sizeOrMap.keys) {
@@ -246,8 +247,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return this[_COUNT];
     }
     setAll(map) {
-      for (let key of sizeOrMap.keys) {
-        this.set(key, sizeOrMap.get(key));
+      for (let key of map.keys) {
+        this.set(key, map.get(key));
       }
     }
     get entries() {
@@ -261,7 +262,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
     }
   }
 
-  let _lt = []; _ltLog = [];
+  let _lt = [];
+  let _ltLog = [];
   function _ltPush(val, log) {
     for (let i = 0; i < val; i++) {
       _lt.push(val); _ltLog.push(log);
@@ -277,22 +279,20 @@ define('collection', ['core','iterables'], (core, iterables) => {
   _ltPush(0x40, 6);
   _ltPush(0x80, 7);
   function _log2(val) {
-    let tt;
-    if (tt = val >> 16) {
-      let t;
-      return (t = tt >> 8) ? _ltLog[t] << 24 : _ltLog[tt] << 16;
+    let tt; let t;
+    if ((tt = val >> 16)) {
+      return ((t = tt >> 8)) ? _ltLog[t] << 24 : _ltLog[tt] << 16;
     }
-    return (t = val >> 8) ? _ltLog[t] << 8 : _ltLog[val];
+    return ((t = val >> 8)) ? _ltLog[t] << 8 : _ltLog[val];
 
   }
   function _qLog2(val, current, tryAll) {
     if (tryAll) return current >> 1;
-    let tt;
-    if (tt = val >> 16) {
-      let t;
-      return (t = tt >> 8) ? _lt[t] << 24 : _lt[tt] << 16;
+    let tt; let t;
+    if ((tt = val >> 16)) {
+      return ((t = tt >> 8)) ? _lt[t] << 24 : _lt[tt] << 16;
     }
-    return (t = val >> 8) ? _lt[t] << 8 : _lt[val];
+    return ((t = val >> 8)) ? _lt[t] << 8 : _lt[val];
   }
   let primeSizes =      [ Number.NEGATIVE_INFINITY
                         , 19
@@ -425,7 +425,6 @@ define('collection', ['core','iterables'], (core, iterables) => {
     let maxIndex = list.length - 1;
     let minimum = 0;
     let currentIndex = _qLog2(maxIndex);
-    let offset = 0;
     let tryAll = false;
     while (currentIndex > 0) {
       if (compareFn(list[minimum + currentIndex], num) == 0) return minimum + currentIndex;
