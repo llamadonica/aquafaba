@@ -42,6 +42,14 @@ define('iterables', ['core'], (core) => {
     }
   }
 
+  let ConcurrentModificationException = exports.ConcurrentModificationException = class ConcurrentModificationException {
+    constructor(message) {
+      this.message = message;
+    }
+    toString() {
+      return `ConcurrentModificationException: ${this.message}`;
+    }
+  };
   let IterableException = exports.IterableException = class IterableException {
     constructor(message) {
       this.message = message;
@@ -328,7 +336,7 @@ define('iterables', ['core'], (core) => {
       };
     }
     return mixedin;
-    // TODO: implement skip, skipWhile, take, takeWhile, compareLengthTo
+    // TODO: implement skip, skipWhile, take, takeWhile
     // and lastIndexOf
   });
 

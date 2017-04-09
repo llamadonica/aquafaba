@@ -31,5 +31,14 @@ define(['core'], function (core) {
       assert.equal(List__T(String), List__T(String));
       done();
     });
+    test('Hashes collisions with one salt do not predict hash collisions with another salt', function (done) {
+      // Known collisions with our hash function.
+      let str1 = "uczixavlfisrqkqohlyeopdycktgxvcf";
+      let str2 = "syssrkzedxifvqktsyvuksodbmhnsbwx";
+      assert.equal(core.stringHashCode(str1, 0), core.stringHashCode(str2, 0));
+      assert.notEqual(core.stringHashCode(str1, 1), core.stringHashCode(str2, 1));
+      assert.notEqual(core.stringHashCode(str1, 2), core.stringHashCode(str2, 2));
+      done();
+    });
   });
 });
