@@ -22,6 +22,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _UPSERT = Symbol('_upsert');
   const _RESIZE = Symbol('_resze');
   const _MAX_BEFORE_RESIZE = Symbol('_maxBeforeResize');
+  const _INITIAL_CLEAR = Symbol('_initialSetup');
+  const _INTERNAL_CLEAR = Symbol('_internalClear');
 
   class _CuckooHashCollection {
     constructor(size = 1) {
@@ -29,7 +31,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
       this[_SALT1] = new core.HashSalt();
       this[_SALT2] = new core.HashSalt();
       this[_REV] = 0;
-      this.clear();
+      this[_INTERNAL_CLEAR]();
+      this[_INITIAL_CLEAR]();
     }
     static get MAX_ITEMS_PER_CELL() {
       return _MAX_ITEMS_PER_CELL;
@@ -40,24 +43,38 @@ define('collection', ['core','iterables'], (core, iterables) => {
     static get BUMP_FACTOR() {
       return _BUMP_FACTOR;
     }
-    clear() {
+    [_INITIAL_CLEAR]() {}
+    [_INTERNAL_CLEAR]() {
       if (this[_COUNT]) {
         this[_REV]++;
       }
       this[_COUNT] = 0;
       this[_CELLS] = new Array(_CuckooHashCollection.MAX_ITEMS_PER_CELL * this[_SIZE]);
-      this[_MAX_BEFORE_RESIZE] = (_CuckooHashCollection.MAX_LOAD * this[_SIZE])|0;
+      this[_MAX_BEFORE_RESIZE] = (_CuckooHashCollection.MAX_LOAD * _CuckooHashCollection.MAX_ITEMS_PER_CELL * this[_SIZE])|0;
       this[_MAX_ATTEMPTS] = 12 + _log2(this[_SIZE]);
     }
-    [_GET_CELL_OFFSET](hashable, forInsert = false, insertSpec, butNot) {
-      let i = core.hashCode(hashable, this[_SALT1]) % this[_SIZE];
+    clear() {
+      this[_INTERNAL_CLEAR]();
+      this[_INITIAL_CLEAR]();
+    }
+    [_GET_CELL_OFFSET](hashable, forInsert = false, insertSpec, butNot,
+                       keyMayExist) {
+      let i = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
       let ixInsert = i;
       if (forInsert) {
         insertSpec.mustKick = true;
         insertSpec.update = false;
         insertSpec.ix = Number.POSITIVE_INFINITY;
       }
-      for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+      // Check all the keys. If i == butNot (which means we are being booted
+      // as a result of a cuckoo operation), skip this entry. After a cuckoo,
+      // butNot will always be the first cell in the first bucket or the first
+      // cell in the second.
+      //
+      // If we know that no entry exists, or if we find the entry
+      // return the correct cell right away. Otherwise, keep going in case
+      // we do find the entry.
+      for (let ix = i; i != butNot && ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
         if (this[_CELLS][ix] && core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]))) {
           if (forInsert) {
             insertSpec.update = true;
@@ -70,13 +87,14 @@ define('collection', ['core','iterables'], (core, iterables) => {
           insertSpec.mustKick = false;
           insertSpec.update = false;
           insertSpec.ix = ix;
+          if (!keyMayExist) return -1;
         }
       }
-      i = core.hashCode(hashable, this[_SALT2]) % this[_SIZE];
+      i = (core.hashCode(hashable, this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
       if (ixInsert == butNot) {
         ixInsert = i;
       }
-      for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+      for (let ix = i; i != butNot && ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
         if (this[_CELLS][ix] && core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]))) {
           if (forInsert) {
             insertSpec.update = true;
@@ -89,6 +107,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
           insertSpec.mustKick = false;
           insertSpec.update = false;
           insertSpec.ix = ix;
+          if (!keyMayExist) return -1;
         }
       }
       if (forInsert && insertSpec.ix >= (_CuckooHashCollection.MAX_ITEMS_PER_CELL * this[_SIZE])) {
@@ -104,9 +123,11 @@ define('collection', ['core','iterables'], (core, iterables) => {
         this[_COUNT]--;
         this[_REV]++;
       }
+      let result = this[_CELLS][ix];
       this[_CELLS][ix] = null;
+      return result;
     }
-    [_UPSERT](hashable, cell) {
+    [_UPSERT](hashable, value, cell) {
       let insertSpec = {
         update: false,
         mustKick: false,
@@ -114,14 +135,18 @@ define('collection', ['core','iterables'], (core, iterables) => {
       };
       let cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
       let butNot;
+      let keyMayExist = true;
       for (;;) {
-        this[_GET_CELL_OFFSET](hashable, true, insertSpec, butNot);
+        this[_GET_CELL_OFFSET](hashable, true, insertSpec, butNot, keyMayExist);
         if (insertSpec.update) {
           let oldCell = this[_CELLS][insertSpec.ix];
-          this[_CELLS][insertSpec.ix] = cell;
-          this[_REV]++;
+          this[_CELLS][insertSpec.ix].value = value;
           return oldCell;
         }
+        // On the first run, we now know that no existing cell would work.
+        // so it's time to create one. On subsequent runs, don't create
+        // a new cell.
+        cell = cell || this[_GEN_KVPAIR_CELL](hashable, value);
         if (!insertSpec.mustKick) {
           this[_CELLS][insertSpec.ix] = cell;
           this[_REV]++;
@@ -147,10 +172,10 @@ define('collection', ['core','iterables'], (core, iterables) => {
       this[_SIZE] = nextBestPrime((oldSize / _CuckooHashCollection.BUMP_FACTOR)|0);
       this[_SALT1] = new core.HashSalt();
       this[_SALT2] = new core.HashSalt();
-      this.clear();
+      this[_INTERNAL_CLEAR]();
       for (let cell of oldCells) {
         if (!cell) continue;
-        this[_UPSERT](this[_GET_CELL_HASHABLE](cell), cell);
+        this[_UPSERT](this[_GET_CELL_HASHABLE](cell), null, cell);
       }
     }
   }
@@ -167,22 +192,61 @@ define('collection', ['core','iterables'], (core, iterables) => {
     get value() {
       return this[_VALUE];
     }
+    set value(newValue) {
+      this[_VALUE] = newValue;
+    }
   }
+
+  const _NEXT = Symbol('_next');
+  const _PREV = Symbol('_prev');
+
+  let LinkedListNodeMixin = core.makeGenericType((p) => {
+    return class extends p {
+      constructor(...args) {
+        super(...args);
+        this[_NEXT] = null;
+        this[_PREV] = null;
+      }
+      insertAfter(node) {
+        this.remove();
+        this[_NEXT] = node[_NEXT];
+        this[_PREV] = node;
+        node[_NEXT] = this;
+        if (this[_NEXT]) this[_NEXT][_PREV] = this;
+      }
+      insertBefore(node) {
+        this.remove();
+        this[_PREV] = node[_PREV];
+        this[_NEXT] = node;
+        node[_PREV] = this;
+        if (this[_PREV]) this[_PREV][_NEXT] = this;
+      }
+      remove() {
+        if (this[_NEXT]) this[_NEXT][_PREV] = this[_PREV];
+        if (this[_PREV]) this[_PREV][_NEXT] = this[_NEXT];
+        this[_NEXT] = this[_PREV] = null;
+      }
+    }
+  });
+  let KVNodeLinkedListNode = LinkedListNodeMixin(KVPair);
 
   const _MAP = Symbol('_map');
   const _INDEX = Symbol('_index');
   const _FN = Symbol('_fn');
+  const _I = Symbol('_i');
   class _CuckooHashCollectionIterator {
     constructor(map, fn = x => x) {
       this[_MAP] = map;
-      this[_INDEX] = 0;
+      this[_INDEX] = -1;
       this[_FN] = fn;
       this[_REV] = map[_REV];
+      this[_I] = 0;
     }
     next() {
       let cell;
       if (this[_REV] != this[_MAP][_REV]) {
-        throw new iterables.ConcurrentModificationException('Map was modified during iteration.');
+        throw new iterables.ConcurrentModificationException(
+            'Map was modified during iteration.');
       }
       do {
         this[_INDEX]++;
@@ -191,7 +255,12 @@ define('collection', ['core','iterables'], (core, iterables) => {
             this[_MAP][_SIZE] * _CuckooHashCollection.MAX_ITEMS_PER_CELL
         &&
         !(cell = this[_MAP][_CELLS][this[_INDEX]]));
-      if (!cell) return {done: true};
+      if (!cell) {
+        core.assert(() => this[_I] == this[_MAP].size,
+               "Expected number of elements yielded to be same as list length");
+        return {done: true};
+      }
+      this[_I]++;
       return {done: false, value: this[_FN](cell)};
     }
   }
@@ -203,23 +272,61 @@ define('collection', ['core','iterables'], (core, iterables) => {
     [Symbol.iterator]() {
       return new _CuckooHashCollectionIterator(this[_MAP], this[_FN]);
     }
+    get length() {
+      return this[_MAP].size;
+    }
   }
+
   let _CuckooHashCollectionIterable =
-    iterables.IterableMixin(_CuckooHashCollectionIterableBase);
-  const _GEN_KVPAIR_CELL = Symbol('_genKVPair');
-  exports.HashMap = class HashMap extends _CuckooHashCollection {
-    constructor(sizeOrMap) {
-      if (typeof sizeOrMap === 'undefined') {
-        super();
-      } else if (typeof sizeOrMap === 'number') {
-        super(sizeOrMap);
-      } else if (sizeOrMap.size) {
-        super(sizeOrMap.size);
-      } else {
-        super();
+    iterables.EfficientLengthMixin(_CuckooHashCollectionIterableBase);
+
+  const _CURRENT = Symbol('_current');
+
+  class _LinkedListIterator {
+    constructor(rootNode, fn = x => x) {
+      this[_ROOT_NODE] = rootNode;
+      this[_CURRENT] = rootNode;
+      this[_FN] = fn;
+    }
+    next() {
+      this[_CURRENT] = this[_CURRENT][_NEXT];
+      if (!this[_CURRENT]) {
+        throw new iterables.IterableException(
+            'I seem to have gone off the rails');
       }
+      if (this[_CURRENT] != this[_ROOT_NODE]) {
+        return {done:false, value: this[_FN](this[_CURRENT])};
+      }
+      return {done: true};
+    }
+  }
+
+  const _ROOT_NODE = Symbol('_rootNode');
+  class _LinkedListIterableBase {
+    constructor(rootNode, fn = x => x) {
+      this[_ROOT_NODE] = rootNode;
+      this[_FN] = fn;
+    }
+    [Symbol.iterator]() {
+      return new _LinkedListIterator(this[_ROOT_NODE], this[_FN]);
+    }
+  }
+  let _LinkedListIterable = iterables.IterableMixin(_LinkedListIterableBase);
+
+  const _GEN_KVPAIR_CELL = Symbol('_genKVPair');
+  const _GEN_ITERABLE = Symbol('_genIterable');
+
+  let HashMap = exports.HashMap = class HashMap extends _CuckooHashCollection {
+    constructor(sizeOrMap) {
+      let size = 1;
+      if (typeof sizeOrMap === 'number') {
+        let size = sizeOrMap;
+      } else if (sizeOrMap && sizeOrMap.size) {
+        size = ((sizeOrMap.size / _CuckooHashCollection.MAX_LOAD)|0);
+      }
+      super(size);
       if (sizeOrMap && sizeOrMap.keys && sizeOrMap.get) {
-        for (let key of sizeOrMap.keys) {
+        for (let key of sizeOrMap.keys()) {
           this.set(key, sizeOrMap.get(key));
         }
       }
@@ -236,7 +343,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return this[_CELLS][ix].value;
     }
     set(key, value) {
-      this[_UPSERT](key, this[_GEN_KVPAIR_CELL](key, value));
+      this[_UPSERT](key, value);
     }
     delete(key) {
       let ix = this[_GET_CELL_OFFSET](key)
@@ -251,16 +358,78 @@ define('collection', ['core','iterables'], (core, iterables) => {
         this.set(key, map.get(key));
       }
     }
-    get entries() {
-      return new _CuckooHashCollectionIterable(this, (x) => [x.key, x.value]);
+    [_GEN_ITERABLE](fn = x => x) {
+      return new _CuckooHashCollectionIterable(this, fn);
     }
-    get keys() {
-      return new _CuckooHashCollectionIterable(this, (x) => x.key);
+    entries() {
+      return this[_GEN_ITERABLE]((x) => [x.key, x.value]);
     }
-    get values() {
-      return new _CuckooHashCollectionIterable(this, (x) => x.value);
+    keys() {
+      return this[_GEN_ITERABLE]((x) => x.key);
+    }
+    values() {
+      return this[_GEN_ITERABLE]((x) => x.value);
     }
   }
+
+  class _LinkedListHashMapIterator extends _LinkedListIterator {
+    constructor(rootNode, fn = x => x) {
+      super(rootNode, fn);
+      this[_REV] = rootNode[_REV];
+      this[_MAP] = rootNode;
+      this[_I] = 0;
+    }
+    next() {
+      if (this[_REV] != this[_MAP][_REV]) {
+        throw new iterables.ConcurrentModificationException(
+            'Map was modified during iteration.');
+      }
+      let result = super.next();
+      assert(() => !result.done || this[_I] == this[_MAP].size)
+      if (!result.done) this[_I]++;
+      return result;
+    }
+  }
+
+  class _LinkedListHashMapIterableBase extends _LinkedListIterableBase {
+    constructor(map, fn = x => x) {
+      super(map, fn);
+      this[_MAP] = map;
+    }
+    get length() {
+      return this[_MAP].size;
+    }
+    [Symbol.iterator]() {
+      return new _LinkedListHashMapIterator(this[_MAP], this[_FN]);
+    }
+  }
+  let _LinkedListHashMapIterable = iterables.EfficientLengthMixin(_LinkedListHashMapIterableBase);
+
+  exports.LinkedListHashMap = class LinkedListHashMap extends HashMap {
+    constructor(sizeOrMap) {
+      super(sizeOrMap);
+    }
+    [_INITIAL_CLEAR]() {
+      super[_INITIAL_CLEAR]();
+      this[_PREV] = this;
+      this[_NEXT] = this;
+    }
+    [_GEN_KVPAIR_CELL](key, value) {
+      let result = new KVNodeLinkedListNode(key, value);
+      result.insertBefore(this);
+      return result;
+    }
+    [_REMOVE_AT](ix) {
+      let result = super[_REMOVE_AT](ix);
+      result.remove();
+      return result;
+    }
+    [_GEN_ITERABLE](fn = x => x) {
+      let result = new _LinkedListHashMapIterable(this, fn);
+      return result;
+    }
+  };
+
 
   let _lt = [];
   let _ltLog = [];
@@ -419,15 +588,17 @@ define('collection', ['core','iterables'], (core, iterables) => {
                         , Number.POSITIVE_INFINITY ];
 
   function nextBestPrime(num) {
-    return primeSizes[binarySearch(num, primeSizes, (a,b) => a == b ? 0 : (a > b ? 1 : 0))];
+    return primeSizes[binarySearch(num, primeSizes, (a,b) => a == b ? 0 : (a > b ? 1 : -1))];
   }
   function binarySearch(num, list, compareFn) {
-    let maxIndex = list.length - 1;
+    let maxIndex = list.length - 2;
     let minimum = 0;
     let currentIndex = _qLog2(maxIndex);
     let tryAll = false;
     while (currentIndex > 0) {
-      if (compareFn(list[minimum + currentIndex], num) == 0) return minimum + currentIndex;
+      if (compareFn(list[minimum + currentIndex], num) == 0) {
+        return minimum + currentIndex;
+      }
       if (compareFn(list[minimum + currentIndex], num) > 0) {
         maxIndex = currentIndex - 1;
         tryAll = true;

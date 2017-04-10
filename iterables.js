@@ -42,7 +42,8 @@ define('iterables', ['core'], (core) => {
     }
   }
 
-  exports.ConcurrentModificationException = class ConcurrentModificationException {
+  exports.ConcurrentModificationException =
+      class ConcurrentModificationException {
     constructor(message) {
       this.message = message;
     }
@@ -69,11 +70,77 @@ define('iterables', ['core'], (core) => {
       return this[_DELEGATE]()[Symbol.iterator]();
     }
   }
+  let _LENGTH = Symbol('_length');
+  let WrapIterableEfficientLengthBase =
+      exports.WrapIterableEfficientLengthBase =
+      class WrapIterableEfficientLengthBase extends WrapIterableBase {
+    constructor(delegate, length) {
+      super(delegate);
+      this[_LENGTH] = length;
+    }
+    get length() {
+      return this[_LENGTH];
+    }
+  }
   /**
    * A utility mixin, designed to implement a lot of convenience methods
    * for any type that already implements Iterable.
    */
-  let IterableMixin = exports.IterableMixin = core.makeGenericType((p) => {
+  let EfficientLengthMixin = exports.EfficientLengthMixin =
+      core.makeGenericType(_EfficientLengthMixiner);
+  function _EfficientLengthMixiner(p) {
+    let mixedin = class extends p {
+      constructor(...args) {
+        super(...args);
+      }
+      static get name() {
+        return `EfficientLengthMixin$<${p.name}>`;
+      }
+    };
+    if (!core.classHasProperty(p,'isEmpty')) {
+      mixedin = class extends mixedin {
+        get isEmpty() {
+          return this.length == 0;
+        }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
+        }
+      };
+    }
+    if (!core.classHasProperty(p,'isNotEmpty')) {
+      mixedin = class extends mixedin {
+        get isNotEmpty() {
+          return this.length != 0;
+        }
+        static get name() {
+          return `IterableMixin$<${p.name}>`;
+        }
+      };
+    }
+    if (!core.classHasMethod(p,'compareLengthTo')) {
+      mixedin.prototype.compareLengthTo = function (n) {
+        let i = this.length;
+        if (i < n) return -1;
+        if (i > n) return 1;
+        return 0;
+      };
+    }
+    if (!core.classHasMethod(p,'map')) {
+      mixedin.prototype.map = function (callback, thisArg) {
+        let outerThis = this;
+        return new (IterableMixin(EfficientLengthMixin(WrapIterableEfficientLengthBase)))(function* () {
+          let i = 0;
+          for (let value of outerThis) {
+            yield callback.apply(thisArg, [value, i, this]);
+            i++;
+          }
+        }, this.length);
+      };
+    }
+    return _IterableMixiner(mixedin);
+  }
+  let IterableMixin = exports.IterableMixin = core.makeGenericType(_IterableMixiner);
+  function _IterableMixiner(p) {
     let mixedin = class extends p {
       constructor(...args) {
         super(...args);
@@ -338,7 +405,7 @@ define('iterables', ['core'], (core) => {
     return mixedin;
     // TODO: implement skip, skipWhile, take, takeWhile
     // and lastIndexOf
-  });
+  }
 
   return exports;
 });
