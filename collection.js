@@ -311,7 +311,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return new _LinkedListIterator(this[_ROOT_NODE], this[_FN]);
     }
   }
-  let _LinkedListIterable = iterables.IterableMixin(_LinkedListIterableBase);
+  // let _LinkedListIterable =iterables.IterableMixin(_LinkedListIterableBase);
 
   const _GEN_KVPAIR_CELL = Symbol('_genKVPair');
   const _GEN_ITERABLE = Symbol('_genIterable');
@@ -320,7 +320,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
     constructor(sizeOrMap) {
       let size = 1;
       if (typeof sizeOrMap === 'number') {
-        let size = sizeOrMap;
+        size = sizeOrMap;
       } else if (sizeOrMap && sizeOrMap.size) {
         size = ((sizeOrMap.size / _CuckooHashCollection.MAX_LOAD)|0);
       }
