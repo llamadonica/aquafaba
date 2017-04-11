@@ -109,12 +109,21 @@ define('core', [], function () {
   //    should be no more likely to collide than it would as a result
   //    of random chance.
   let _SALT = Symbol('_salt');
+  let _FIRSTCOMMON = Symbol('_common1');
+  let _SECONDCOMMON = Symbol('_common2');
   exports.HashSalt = class HashSalt {
     constructor() {
       this[_SALT] =  (Math.random() * 0x1fffffff)|0;
     }
     get salt() {
       return this[_SALT];
+    }
+
+    static get firstCommon() {
+      return this[_FIRSTCOMMON] = this[_FIRSTCOMMON] || new HashSalt();
+    }
+    static get secondCommon() {
+      return this[_SECONDCOMMON] = this[_SECONDCOMMON] || new HashSalt();
     }
   };
   /**

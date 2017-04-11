@@ -24,11 +24,44 @@ define(['collection', 'iterables'], function (collection, iterables) {
         //console.log(`Size is now ${toMap.size}`);
       }
     }
+    function addAllQuick(toMap, fromMap) {
+      toMap.setAll(fromMap);
+    }
     function isEven(n) {
       return (n & 1) == 0;
     }
     function isOdd(n) {
       return (n & 1) == 1;
+    }
+    const adders = [
+      {name: 'one at a time', fn: addAll},
+      {name: 'quickly', fn: addAllQuick}
+    ];
+    function testAdder(mapFactory, testName, adderName, adderFn) {
+      test(`Growing to largish capacity for ${testName} with ${adderName}`, (done) => {
+        setPerformance(`Start 1000 inserts ${testName} with ${adderName}`);
+        let map = mapFactory();
+        for (let i = 0; i < 256; i++) {
+          //console.log(`Setting map[${i}] = ${i}`);
+          map.set(i,i);
+          //console.log(`Size is now ${map.size}`);
+        }
+        adderFn(map, mapGen(256, 512));
+        let secondMap = mapFactory(mapGen(512,1000));
+        //console.log(`Second map is ${secondMap.size} elements`);
+        adderFn(map, secondMap);
+        assert.equal(map.size, 1000);
+        for (let i = 0; i < 1000; i += 2) {
+          map.delete(i);
+        }
+        assert.equal(map.size, 500);
+        assert.isFalse(map.keys().some(isEven));
+        assert.isTrue(map.keys().every(isOdd));
+        adderFn(map, mapGen(0,1000));
+        assert.equal(map.size, 1000);
+        setPerformance(`End 1000 inserts ${testName} with ${adderName}`);
+        done();
+      });
     }
     function testMap(mapFactory, testName) {
       test(`Basic getting and setting for ${testName}`, function (done) {
@@ -39,30 +72,9 @@ define(['collection', 'iterables'], function (collection, iterables) {
         assert.equal(x.get('one'), 1);
         done();
       });
-      test(`Growing to largish capacity for ${testName}`, (done) => {
-        setPerformance(`Start 1000 inserts ${testName}`);
-        let map = mapFactory();
-        for (let i = 0; i < 256; i++) {
-          //console.log(`Setting map[${i}] = ${i}`);
-          map.set(i,i);
-          //console.log(`Size is now ${map.size}`);
-        }
-        addAll(map, mapGen(256, 512));
-        let secondMap = mapFactory(mapGen(512,1000));
-        //console.log(`Second map is ${secondMap.size} elements`);
-        addAll(map, secondMap);
-        assert.equal(map.size, 1000);
-        for (let i = 0; i < 1000; i += 2) {
-          map.delete(i);
-        }
-        assert.equal(map.size, 500);
-        assert.isFalse(map.keys().some(isEven));
-        assert.isTrue(map.keys().every(isOdd));
-        addAll(map, mapGen(0,1000));
-        assert.equal(map.size, 1000);
-        setPerformance(`End 1000 inserts ${testName}`);
-        done();
-      });
+      for (let adder of adders) {
+        testAdder(mapFactory, testName, adder.name, adder.fn);
+      }
       test(`Deleting many elements for ${testName}`, (done) => {
         setPerformance(`Start 1000 inserts 1000 deletes ${testName}`);
         let map = mapFactory();
@@ -92,13 +104,110 @@ define(['collection', 'iterables'], function (collection, iterables) {
                       iterables.ConcurrentModificationException);
         done();
       });
+      test(`Concurrent modification is illegal for ${testName}`, (done) => {
+        let map = mapFactory();
+        map.set(0,0);
+        map.set(1,9);
+        map.set(2,2);
+        assert.equal(map.size, 3);
+        let iter = map.keys()[Symbol.iterator]();
+        iter.next();
+        iter.next();
+        iter.next();
+        map.set(3,3);
+        // But this is:
+        assert.throws(() => iter.next(),
+                      iterables.ConcurrentModificationException);
+        done();
+      });
+      test(`Removing a value that's not there isn't a concurrent modification for ${testName}`, (done) => {
+        let map = mapFactory();
+        map.set(0,0);
+        map.set(1,9);
+        map.set(2,2);
+        map.set(3,3);
+        assert.equal(map.size, 4);
+        let iter = map.keys()[Symbol.iterator]();
+        iter.next();
+        map.delete(1000);
+        let {value} = iter.next();
+        map.delete(value);
+        // value won't change. Ho hum.
+        assert.throws(() => iter.next(),
+                      iterables.ConcurrentModificationException);
+        done();
+      });
+      test(`Changing a value isn't a concurrent modification for ${testName}`, (done) => {
+        let map = mapFactory();
+        map.set(0,0);
+        map.set(1,1);
+        map.set(2,2);
+        assert.equal(map.size, 3);
+        let iter = map.keys()[Symbol.iterator]();
+        let {value} = iter.next();
+        map.set(value, value * 2);
+        ({value} = iter.next());
+        // value won't change. Ho hum.
+        assert.equal(map.get(value), value);
+        done();
+      });
+      test(`Modification during set if absent is not an error for ${testName}`, (done) => {
+        let map = mapFactory();
+        map.set(0,0);
+        map.set(1,1);
+        map.set(2,2);
+        assert.equal(map.size, 3);
+        map.setIfAbsent(4, () => {
+          map.set(5,5);
+          map.set(4,-1);
+          return 4;
+        });
+        assert.equal(map.get(4), 4);
+        assert.equal(map.get(5), 5);
+        done();
+      });
+      test(`Adding many existing keys isn't a modification ${testName}`, (done) => {
+        let map = mapFactory();
+        let map2 = mapFactory();
+        map.set(0,0);
+        map.set(1,1);
+        map.set(2,2);
+        map.set(4,4);
+        map.set(5,5);
+        for (let [key, value] of map.entries()) {
+          map2.set(key, value);
+        }
+        let iter = map.keys()[Symbol.iterator]();
+        iter.next();
+        addAll(map, map2);
+        // Should not throw.
+        iter.next();
+        done();
+      });
+      test(`Put if absent doesn't lose values across resize ${testName}`, (done) => {
+        let map = mapFactory();
+        map.setIfAbsent("S", () => 0);
+        map.setIfAbsent("T", () => 0);
+        map.setIfAbsent("U", () => 0);
+        map.setIfAbsent("C", () => 0);
+        map.setIfAbsent("a", () => 0);
+        map.setIfAbsent("b", () => 0);
+        map.setIfAbsent("c", () => 0);
+        map.setIfAbsent("d", () => 0);
+        map.setIfAbsent("e", () => 0);
+        map.setIfAbsent("f", () => 0);
+        map.setIfAbsent("g", () => 0);
+        map.setIfAbsent("h", () => 0);
+        assert.isTrue(map.has("h"));
+        done();
+      });
     }
     test('Loads', function (done) {
       done();
     });
     for (let {name, mapFactory} of [
       {name: 'HashMap', mapFactory: (map) => new collection.HashMap(map)},
-      {name: 'LinkedListHashMap', mapFactory: (map) => new collection.LinkedHashMap(map)},
+      {name: 'LinkedHashMap', mapFactory: (map) => new collection.LinkedHashMap(map)},
       // {name: 'native Map', mapFactory: (map) => new Map(map)},
     ]) {
       testMap(mapFactory, name);

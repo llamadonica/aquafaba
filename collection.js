@@ -12,8 +12,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _COUNT = Symbol('_count');
   const _CELLS = Symbol('_cells');
   const _MAX_ATTEMPTS = Symbol('_maxAttempts');
-  const _MAX_LOAD = 0.88;
-  const _BUMP_FACTOR = 0.73;
+  const _MAX_LOAD = 0.80;
+  const _BUMP_FACTOR = 0.50;
   const _MAX_ITEMS_PER_CELL = 3;
   const _REV = Symbol('_rev');
   const _GET_EXISTING_CELLS_NEW_OFFSET = Symbol('_getExistingCellsNewOffset');
@@ -27,21 +27,29 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _INITIAL_CLEAR = Symbol('_initialSetup');
   const _INTERNAL_CLEAR = Symbol('_internalClear');
   const _REINSERT = Symbol('_reinsert');
+  const _GET_LOOKUP_OFFSET_FOR_CACHE_KEY = Symbol('_getLookupOffsetForCacheKey');
 
   /* A strut type to enable the key to be cached */
   class _HashCachingKey {
     constructor(key) {
       this.key = key;
+      this.cachedSalts = new WeakMap();
     }
     hashCode(salt) {
-      return core.hashCode(this.key, salt);
+      if (this.cachedSalts.has(salt)) {
+        return this.cachedSalts.get(salt);
+      }
+      let hashCode = core.hashCode(this.key, salt);
+      this.cachedSalts.set(salt, hashCode);
+      return hashCode;
     }
+
   }
   class _CuckooHashCollection {
     constructor(size = 1) {
       this[_SIZE] = nextBestPrime(size);
-      this[_SALT1] = new core.HashSalt();
-      this[_SALT2] = new core.HashSalt();
+      this[_SALT1] = core.HashSalt.firstCommon;
+      this[_SALT2] = core.HashSalt.secondCommon;
       this[_REV] = 0;
       this[_INTERNAL_CLEAR]();
       this[_INITIAL_CLEAR]();
@@ -93,6 +101,29 @@ define('collection', ['core','iterables'], (core, iterables) => {
       }
       assert(() => ixToInsert != null);
       return {mustKick: true, ix: ixToInsert};
+    }
+    [_GET_LOOKUP_OFFSET_FOR_CACHE_KEY](hashKey) {
+      let i = (hashKey.hashCode(this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      // console.log(`Looking for ${hashable} at index ${i}`);
+      for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+        if (!this[_CELLS][ix]) {
+          break;
+        }
+        if (core.equals(hashKey.key, this[_GET_CELL_HASHABLE](this[_CELLS][ix]).key)) {
+          return ix;
+        }
+      }
+      i = (hashKey.hashCode( this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      // console.log(`Looking for ${hashable} at index ${i}`);
+      for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+        if (!this[_CELLS][ix]) {
+          break;
+        }
+        if (core.equals(hashKey.key, this[_GET_CELL_HASHABLE](this[_CELLS][ix]).key)) {
+          ix;
+        }
+      }
+      return -1;
     }
     [_GET_INSERT_OFFSET](hashable) {
       let i1 = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
@@ -166,7 +197,8 @@ define('collection', ['core','iterables'], (core, iterables) => {
         this[_CELLS][ix].value = value;
         return;
       }
-      let insertionCell = this[_GEN_KVPAIR_CELL](new _HashCachingKey(hashable), value)
+      let insertionCell = this[_GEN_KVPAIR_CELL](new _HashCachingKey(hashable), value);
+      insertionCell.ix = ix;
       // Can you kick it?
       // console.log(`Inserting ${insertionCell.key.key} = ${insertionCell.value} -> ${ix}`);
       while (mustKick) {
@@ -181,6 +213,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
         }
         cuckooAttemptsRemaining--;
         ({mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](insertionCell = oldCell, butNot));
+        insertionCell.ix = ix;
         // console.log(`Relocating ${insertionCell.key.key} = ${insertionCell.value} -> ${ix}`);
       }
       this[_CELLS][ix] = insertionCell;
@@ -191,6 +224,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
       let {mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](cell, -1);
       // console.log(`Moving ${cell.key.key} = ${cell.value} -> ${ix} after resize`);
       let cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
+      cell.ix = ix;
       while (mustKick) {
         let oldCell = this[_CELLS][ix];
         this[_CELLS][ix] = cell;
@@ -202,18 +236,19 @@ define('collection', ['core','iterables'], (core, iterables) => {
         }
         cuckooAttemptsRemaining--;
         ({mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](cell = oldCell, butNot));
+        cell.ix = ix;
         // console.log(`Relocating ${cell.key.key} = ${cell.value} -> ${ix} after resize (rare).`);
       }
       this[_CELLS][ix] = cell;
     }
 
-    [_RESIZE](resalt = false) {
+    [_RESIZE](resalt = false, targetSize = 0) {
       // console.log(`Resizing`);
       let oldCells = this[_CELLS];
       let oldSize = this[_SIZE];
-      this[_SIZE] = nextBestPrime((oldSize / _CuckooHashCollection.BUMP_FACTOR)|0);
+      targetSize = targetSize || (oldSize / _CuckooHashCollection.BUMP_FACTOR)|0;
+      this[_SIZE] = nextBestPrime(targetSize);
       if (resalt) {
-        // console.log(`Resalting`);
         this[_SALT1] = new core.HashSalt();
         this[_SALT2] = new core.HashSalt();
       }
@@ -366,13 +401,27 @@ define('collection', ['core','iterables'], (core, iterables) => {
       let size = 1;
       if (typeof sizeOrMap === 'number') {
         size = sizeOrMap;
+      } else if (sizeOrMap instanceof HashMap) {
+        size = sizeOrMap[_SIZE] - 1;
       } else if (sizeOrMap && sizeOrMap.size) {
         size = ((sizeOrMap.size / _CuckooHashCollection.MAX_LOAD)|0);
       }
       super(size);
+      if (sizeOrMap instanceof HashMap) {
+        // Short circuit when the other type was already in our format.
+        // Saves a bit of rehashing.
+        this[_SALT1] = sizeOrMap[_SALT1];
+        this[_SALT2] = sizeOrMap[_SALT2];
+        this[_SIZE] = sizeOrMap[_SIZE];
+        this[_COUNT] = sizeOrMap[_COUNT];
+        for (let cell of sizeOrMap[_GEN_ITERABLE]()) {
+          this[_CELLS][cell.ix] = this[_GEN_KVPAIR_CELL](cell.key, cell.value);
+        }
+        return;
+      }
       if (sizeOrMap && sizeOrMap.keys && sizeOrMap.get) {
-        for (let key of sizeOrMap.keys()) {
-          this.set(key, sizeOrMap.get(key));
+        for (let [key, value] of sizeOrMap.entries()) {
+          this.set(key, value);
         }
       }
     }
@@ -383,12 +432,21 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return cell.key;
     }
     get(key) {
-      let ix = this[_GET_LOOKUP_OFFSET](key)
+      let ix = this[_GET_LOOKUP_OFFSET](key);
       if (ix < 0) return;
       return this[_CELLS][ix].value;
     }
+    has(key) {
+      let ix = this[_GET_LOOKUP_OFFSET](key);
+      return ix >= 0;
+    }
     set(key, value) {
       this[_UPSERT](key, value);
+    }
+    setIfAbsent(key, valueFactory) {
+      if (!this.has(key)) {
+        this.set(key, valueFactory());
+      }
     }
     delete(key) {
       let ix = this[_GET_LOOKUP_OFFSET](key)
@@ -399,8 +457,17 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return this[_COUNT];
     }
     setAll(map) {
-      for (let key of map.keys) {
-        this.set(key, map.get(key));
+      // This is very conservative. It will only grow the list
+      // When the quantity of new inserts is actually greater than
+      // the existing. We could also do a shrink after?
+      // There's not a great way to do shortcuts. Resalting is way too
+      // common.
+      let newMinimumSize = map.size / _CuckooHashCollection.MAX_LOAD | 0;
+      if (newMinimumSize > this[_SIZE]) {
+        this[_RESIZE](false, newMinimumSize);
+      }
+      for (let [key, value] of map.entries()) {
+        this.set(key, value);
       }
     }
     [_GEN_ITERABLE](fn = x => x) {
