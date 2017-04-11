@@ -120,7 +120,6 @@ define('collection', ['core','iterables'], (core, iterables) => {
     [_GET_LOOKUP_OFFSET](hashable) {
       let i = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
       // console.log(`Looking for ${hashable} at index ${i}`);
-      let firstIx = i, firstEmptyIx;
       for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
         if (!this[_CELLS][ix]) {
           break;
@@ -160,7 +159,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
       this[_CELLS][ixToReplaceMe] = null;
       return result;
     }
-    [_UPSERT](hashable, value, cell) {
+    [_UPSERT](hashable, value) {
       let {update, mustKick, ix} = this[_GET_INSERT_OFFSET](hashable);
       let cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
       if (update) {
