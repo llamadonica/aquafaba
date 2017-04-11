@@ -1,5 +1,11 @@
 // @requires bower_components/imd/imd.js
 
+function setPerformance(x) {
+  if (window.performance && window.performance.mark) {
+    performance.mark(x);
+  }
+}
+
 define(['collection', 'iterables'], function (collection, iterables) {
   suite('Collection tests', function () {
     function mapGen(from, to) {
@@ -34,6 +40,7 @@ define(['collection', 'iterables'], function (collection, iterables) {
         done();
       });
       test(`Growing to largish capacity for ${testName}`, (done) => {
+        setPerformance(`Start 1000 inserts ${testName}`);
         let map = mapFactory();
         for (let i = 0; i < 256; i++) {
           //console.log(`Setting map[${i}] = ${i}`);
@@ -53,9 +60,11 @@ define(['collection', 'iterables'], function (collection, iterables) {
         assert.isTrue(map.keys().every(isOdd));
         addAll(map, mapGen(0,1000));
         assert.equal(map.size, 1000);
+        setPerformance(`End 1000 inserts ${testName}`);
         done();
       });
       test(`Deleting many elements for ${testName}`, (done) => {
+        setPerformance(`Start 1000 inserts 1000 deletes ${testName}`);
         let map = mapFactory();
         map.set(0,0);
         for (let i = 0; i < 1000; i++) {
@@ -63,6 +72,7 @@ define(['collection', 'iterables'], function (collection, iterables) {
           map.delete(i);
           assert.equal(map.size, 1);
         }
+        setPerformance(`End 1000 inserts 1000 deletes ${testName}`);
         done();
       });
       // Cuckoo hashing can't really deal with large numbers of badly formed
@@ -89,6 +99,7 @@ define(['collection', 'iterables'], function (collection, iterables) {
     for (let {name, mapFactory} of [
       {name: 'HashMap', mapFactory: (map) => new collection.HashMap(map)},
       {name: 'LinkedListHashMap', mapFactory: (map) => new collection.LinkedHashMap(map)},
+      // {name: 'native Map', mapFactory: (map) => new Map(map)},
     ]) {
       testMap(mapFactory, name);
     }

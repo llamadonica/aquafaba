@@ -415,6 +415,11 @@ define('collection', ['core','iterables'], (core, iterables) => {
     values() {
       return this[_GEN_ITERABLE]((x) => x.value);
     }
+    forEach(callback, thisArg) {
+      return this[_GEN_ITERABLE]((x) => x).forEach((entry) => {
+        callback.apply(thisArg, [entry.value, entry.key.key]);
+      });
+    }
   }
 
   class _LinkedHashMapIterator extends _LinkedListIterator {
@@ -430,7 +435,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
             'Map was modified during iteration.');
       }
       let result = super.next();
-      assert(() => !result.done || this[_I] == this[_MAP].size)
+      core.assert(() => !result.done || this[_I] == this[_MAP].size)
       if (!result.done) this[_I]++;
       return result;
     }
