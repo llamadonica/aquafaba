@@ -123,19 +123,19 @@ define('core', [], function () {
    * @return {int}
    */
   exports.hashCode = (value, salt) => {
-    if (value == null) return nullHashCode();
+    if (value == null) return nullHashCode(salt.salt)|0;
     let hashCode;
     if (typeof value === 'string') {
-      return stringHashCode(value, salt.salt);
+      return stringHashCode(value, salt.salt)|0;
     }
     if (typeof value === 'boolean') {
-      return booleanHashCode(value, salt.salt);
+      return booleanHashCode(value, salt.salt)|0;
     }
     if (typeof value === 'number' && ((value|0) == value)) {
-      return intHashCode(value, salt.salt);
+      return intHashCode(value, salt.salt)|0;
     }
     if (typeof value === 'number') {
-      return floatHashCode(value, salt.salt);
+      return floatHashCode(value, salt.salt)|0;
     }
 
     let innerMap;
@@ -148,7 +148,7 @@ define('core', [], function () {
     if (innerMap.has(value)) {
       return innerMap.get(value);
     }
-    innerMap.set(value, hashCode = objectHashCode(value));
+    innerMap.set(value, hashCode = objectHashCode(value, salt)|0);
     return hashCode;
   }
 
@@ -186,11 +186,11 @@ define('core', [], function () {
   function nullHashCode(hash) {
     return hash;
   }
-  function objectHashCode(value) {
-    if (value.hasOwnProperty('hashCode')) {
-      return value.hashCode;
+  function objectHashCode(value, salt) {
+    if (value.hashCode) {
+      return value.hashCode(salt);
     }
-    return Math.random() * 0x3fffffff | 0;
+    return Math.random() * 0x1fffffff | 0;
   }
   exports.stringHashCode = stringHashCode;
 

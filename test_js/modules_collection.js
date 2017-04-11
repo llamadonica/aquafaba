@@ -1,9 +1,9 @@
 // @requires bower_components/imd/imd.js
 
-define(['collection'], function (collection) {
+define(['collection', 'iterables'], function (collection, iterables) {
   suite('Collection tests', function () {
     function mapGen(from, to) {
-      let map = new collection.LinkedListHashMap();
+      let map = new collection.LinkedHashMap();
       for (let i = from; i < to; i++) {
         map.set(i,i);
       }
@@ -55,13 +55,40 @@ define(['collection'], function (collection) {
         assert.equal(map.size, 1000);
         done();
       });
+      test(`Deleting many elements for ${testName}`, (done) => {
+        let map = mapFactory();
+        map.set(0,0);
+        for (let i = 0; i < 1000; i++) {
+          map.set(i+1, i+1);
+          map.delete(i);
+          assert.equal(map.size, 1);
+        }
+        done();
+      });
+      // Cuckoo hashing can't really deal with large numbers of badly formed
+      // hashes.
+      test(`Concurrent modification is illegal for ${testName}`, (done) => {
+        let map = mapFactory();
+        map.set(0,0);
+        map.set(1,1);
+        let iter = map.keys()[Symbol.iterator]();
+        iter.next();
+        map.set(1,9);
+        // Updating an existing key isn't a modification.
+        iter.next();
+        map.set(2,2);
+        // But this is:
+        assert.throws(() => iter.next(),
+                      iterables.ConcurrentModificationException);
+        done();
+      });
     }
     test('Loads', function (done) {
       done();
     });
     for (let {name, mapFactory} of [
       {name: 'HashMap', mapFactory: (map) => new collection.HashMap(map)},
-      {name: 'LinkedListHashMap', mapFactory: (map) => new collection.LinkedListHashMap(map)},
+      {name: 'LinkedListHashMap', mapFactory: (map) => new collection.LinkedHashMap(map)},
     ]) {
       testMap(mapFactory, name);
     }

@@ -16,7 +16,9 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _BUMP_FACTOR = 0.73;
   const _MAX_ITEMS_PER_CELL = 3;
   const _REV = Symbol('_rev');
-  const _GET_CELL_OFFSET = Symbol('_getCellOffset');
+  const _GET_EXISTING_CELLS_NEW_OFFSET = Symbol('_getExistingCellsNewOffset');
+  const _GET_LOOKUP_OFFSET = Symbol('_getLookupOffset');
+  const _GET_INSERT_OFFSET = Symbol('_getInsertOffset');
   const _REMOVE_AT = Symbol('_removeAt');
   const _GET_CELL_HASHABLE = Symbol('_getCellHashable');
   const _UPSERT = Symbol('_upsert');
@@ -24,7 +26,17 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _MAX_BEFORE_RESIZE = Symbol('_maxBeforeResize');
   const _INITIAL_CLEAR = Symbol('_initialSetup');
   const _INTERNAL_CLEAR = Symbol('_internalClear');
+  const _REINSERT = Symbol('_reinsert');
 
+  /* A strut type to enable the key to be cached */
+  class _HashCachingKey {
+    constructor(key) {
+      this.key = key;
+    }
+    hashCode(salt) {
+      return core.hashCode(this.key, salt);
+    }
+  }
   class _CuckooHashCollection {
     constructor(size = 1) {
       this[_SIZE] = nextBestPrime(size);
@@ -43,12 +55,13 @@ define('collection', ['core','iterables'], (core, iterables) => {
     static get BUMP_FACTOR() {
       return _BUMP_FACTOR;
     }
-    [_INITIAL_CLEAR]() {}
-    [_INTERNAL_CLEAR]() {
+    [_INITIAL_CLEAR]() {
       if (this[_COUNT]) {
         this[_REV]++;
       }
       this[_COUNT] = 0;
+    }
+    [_INTERNAL_CLEAR]() {
       this[_CELLS] = new Array(_CuckooHashCollection.MAX_ITEMS_PER_CELL * this[_SIZE]);
       this[_MAX_BEFORE_RESIZE] = (_CuckooHashCollection.MAX_LOAD * _CuckooHashCollection.MAX_ITEMS_PER_CELL * this[_SIZE])|0;
       this[_MAX_ATTEMPTS] = 12 + _log2(this[_SIZE]);
@@ -57,64 +70,71 @@ define('collection', ['core','iterables'], (core, iterables) => {
       this[_INTERNAL_CLEAR]();
       this[_INITIAL_CLEAR]();
     }
-    [_GET_CELL_OFFSET](hashable, forInsert = false, insertSpec, butNot,
-                       keyMayExist) {
+    // Get the new cell of an existing offset.
+    [_GET_EXISTING_CELLS_NEW_OFFSET](hashable, butNot) {
       let i = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
-      let ixInsert = i;
-      if (forInsert) {
-        insertSpec.mustKick = true;
-        insertSpec.update = false;
-        insertSpec.ix = Number.POSITIVE_INFINITY;
-      }
-      // Check all the keys. If i == butNot (which means we are being booted
-      // as a result of a cuckoo operation), skip this entry. After a cuckoo,
-      // butNot will always be the first cell in the first bucket or the first
-      // cell in the second.
-      //
-      // If we know that no entry exists, or if we find the entry
-      // return the correct cell right away. Otherwise, keep going in case
-      // we do find the entry.
-      for (let ix = i; i != butNot && ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
-        if (this[_CELLS][ix] && core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]))) {
-          if (forInsert) {
-            insertSpec.update = true;
-            insertSpec.mustKick = false;
-            insertSpec.ix = ix;
+      let ixToInsert;
+      if (i != butNot) {
+        ixToInsert = i;
+        for (let ix = i;  ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+          if (!this[_CELLS][ix]) {
+            return {mustKick: false, ix: ix};
           }
-          return ix;
-        }
-        if (forInsert && !this[_CELLS][ix] && ix < insertSpec.ix) {
-          insertSpec.mustKick = false;
-          insertSpec.update = false;
-          insertSpec.ix = ix;
-          if (!keyMayExist) return -1;
         }
       }
       i = (core.hashCode(hashable, this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
-      if (ixInsert == butNot) {
-        ixInsert = i;
-      }
-      for (let ix = i; i != butNot && ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
-        if (this[_CELLS][ix] && core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]))) {
-          if (forInsert) {
-            insertSpec.update = true;
-            insertSpec.mustKick = false;
-            insertSpec.ix = ix;
+      if (i != butNot) {
+        ixToInsert = i;
+        for (let ix = i;  ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+          if (!this[_CELLS][ix]) {
+            return {mustKick: false, ix: ix};
           }
+        }
+      }
+      return {mustKick: true, ix: ixToInsert};
+    }
+    [_GET_INSERT_OFFSET](hashable) {
+      let i1 = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      let firstIx = i1, firstEmptyIx;
+      for (let ix = i1; ix < i1 + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+        if (this[_CELLS][ix] && core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]).key)) {
+          return {update: true, ix: ix};
+        } else if (!this[_CELLS][ix]) {
+          firstEmptyIx = firstEmptyIx == null ? ix : firstEmptyIx;
+        }
+      }
+      let i2 = (core.hashCode(hashable, this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      for (let ix = i2; ix < i2 + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+        if (this[_CELLS][ix] && core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]).key)) {
+          return {update: true, ix: ix};
+        } else if (!this[_CELLS][ix]) {
+          firstEmptyIx = firstEmptyIx == null ? ix : firstEmptyIx;
+        }
+      }
+      if (firstEmptyIx != null) {
+        return {update: false, mustKick: false, ix: firstEmptyIx };
+      }
+      return {update: false, mustKick: true, ix: firstIx};
+    }
+    [_GET_LOOKUP_OFFSET](hashable) {
+      let i = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      let firstIx = i, firstEmptyIx;
+      for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+        if (!this[_CELLS][ix]) {
+          break;
+        }
+        if (core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]).key)) {
           return ix;
         }
-        if (forInsert && !this[_CELLS][ix] && ix < insertSpec.ix) {
-          insertSpec.mustKick = false;
-          insertSpec.update = false;
-          insertSpec.ix = ix;
-          if (!keyMayExist) return -1;
-        }
       }
-      if (forInsert && insertSpec.ix >= (_CuckooHashCollection.MAX_ITEMS_PER_CELL * this[_SIZE])) {
-        insertSpec.mustKick = true;
-        insertSpec.update = false;
-        insertSpec.ix = ixInsert;
-        return ixInsert;
+      i = (core.hashCode(hashable, this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+        if (!this[_CELLS][ix]) {
+          break;
+        }
+        if (core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]).key)) {
+          ix;
+        }
       }
       return -1;
     }
@@ -123,59 +143,75 @@ define('collection', ['core','iterables'], (core, iterables) => {
         this[_COUNT]--;
         this[_REV]++;
       }
+      let ixPathEnd = ix - (ix % _CuckooHashCollection.MAX_ITEMS_PER_CELL) + _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      let ixToReplaceMe;
+      for (ixToReplaceMe = ix; ixToReplaceMe < ixPathEnd - 1; ixToReplaceMe++) {
+        if (!this[_CELLS][ixToReplaceMe + 1]) {
+          break;
+        }
+      }
+      // ixToReplaceMe will now be the last node that can be moved closer to
+      // or my own value, if none was found.
       let result = this[_CELLS][ix];
-      this[_CELLS][ix] = null;
+      this[_CELLS][ix] = this[_CELLS][ixToReplaceMe];
+      this[_CELLS][ixToReplaceMe] = null;
       return result;
     }
     [_UPSERT](hashable, value, cell) {
-      let insertSpec = {
-        update: false,
-        mustKick: false,
-        ix: -1,
-      };
+      let {update, mustKick, ix} = this[_GET_INSERT_OFFSET](hashable);
       let cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
-      let butNot;
-      let keyMayExist = true;
-      for (;;) {
-        this[_GET_CELL_OFFSET](hashable, true, insertSpec, butNot, keyMayExist);
-        if (insertSpec.update) {
-          let oldCell = this[_CELLS][insertSpec.ix];
-          this[_CELLS][insertSpec.ix].value = value;
-          return oldCell;
-        }
-        // On the first run, we now know that no existing cell would work.
-        // so it's time to create one. On subsequent runs, don't create
-        // a new cell.
-        cell = cell || this[_GEN_KVPAIR_CELL](hashable, value);
-        if (!insertSpec.mustKick) {
-          this[_CELLS][insertSpec.ix] = cell;
-          this[_REV]++;
-          this[_COUNT]++;
-          return;
-        }
-        if (cuckooAttemptsRemaining <= 0 || this[_COUNT] > this[_MAX_BEFORE_RESIZE]) {
-          this[_RESIZE]();
-          continue;
-        }
-        // We have to kick a neighbor out.
-        let oldCell = this[_CELLS][insertSpec.ix];
-        butNot = insertSpec.ix;
-        this[_CELLS][insertSpec.ix] = cell;
-        cuckooAttemptsRemaining--;
-        cell = oldCell;
-        hashable = this[_GET_CELL_HASHABLE](cell);
+      if (update) {
+        this[_CELLS][ix].value = value;
       }
+      let insertionCell = this[_GEN_KVPAIR_CELL](new _HashCachingKey(hashable), value)
+      // Can you kick it?
+      while (mustKick) {
+        // Yes you can!
+        let oldCell = this[_CELLS][ix];
+        this[_CELLS][ix] = insertionCell;
+        let butNot = ix;
+        if (cuckooAttemptsRemaining <= 0 || this[_COUNT] > this[_MAX_BEFORE_RESIZE]) {
+          this[_RESIZE](cuckooAttemptsRemaining <= 0);
+          butNot = -1;
+          cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
+        }
+        cuckooAttemptsRemaining--;
+        ({mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](insertionCell = oldCell, butNot));
+      }
+      this[_CELLS][ix] = insertionCell;
+      this[_REV]++;
+      this[_COUNT]++;
     }
-    [_RESIZE]() {
+    [_REINSERT](cell) {
+      let {mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](cell, -1);
+      let cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
+      while (mustKick) {
+        let oldCell = this[_CELLS][ix];
+        this[_CELLS][ix] = cell;
+        let butNot = ix;
+        if (cuckooAttemptsRemaining <= 0 || this[_COUNT] > this[_MAX_BEFORE_RESIZE]) {
+          this[_RESIZE](cuckooAttemptsRemaining <= 0);
+          butNot = -1;
+          cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
+        }
+        cuckooAttemptsRemaining--;
+        ({mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](cell = oldCell, butNot));
+      }
+      this[_CELLS][ix] = cell;
+    }
+
+    [_RESIZE](resalt = false) {
       let oldCells = this[_CELLS];
       let oldSize = this[_SIZE];
       this[_SIZE] = nextBestPrime((oldSize / _CuckooHashCollection.BUMP_FACTOR)|0);
-      this[_SALT1] = new core.HashSalt();
-      this[_SALT2] = new core.HashSalt();
+      if (resalt) {
+        this[_SALT1] = new core.HashSalt();
+        this[_SALT2] = new core.HashSalt();
+      }
       this[_INTERNAL_CLEAR]();
       for (let cell of oldCells) {
         if (!cell) continue;
-        this[_UPSERT](this[_GET_CELL_HASHABLE](cell), null, cell);
+        this[_REINSERT](cell);
       }
     }
   }
@@ -338,7 +374,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return cell.key;
     }
     get(key) {
-      let ix = this[_GET_CELL_OFFSET](key)
+      let ix = this[_GET_LOOKUP_OFFSET](key)
       if (ix < 0) return;
       return this[_CELLS][ix].value;
     }
@@ -346,7 +382,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
       this[_UPSERT](key, value);
     }
     delete(key) {
-      let ix = this[_GET_CELL_OFFSET](key)
+      let ix = this[_GET_LOOKUP_OFFSET](key)
       if (ix < 0) return;
       return this[_REMOVE_AT](ix).value;
     }
@@ -362,17 +398,17 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return new _CuckooHashCollectionIterable(this, fn);
     }
     entries() {
-      return this[_GEN_ITERABLE]((x) => [x.key, x.value]);
+      return this[_GEN_ITERABLE]((x) => [x.key.key, x.value]);
     }
     keys() {
-      return this[_GEN_ITERABLE]((x) => x.key);
+      return this[_GEN_ITERABLE]((x) => x.key.key);
     }
     values() {
       return this[_GEN_ITERABLE]((x) => x.value);
     }
   }
 
-  class _LinkedListHashMapIterator extends _LinkedListIterator {
+  class _LinkedHashMapIterator extends _LinkedListIterator {
     constructor(rootNode, fn = x => x) {
       super(rootNode, fn);
       this[_REV] = rootNode[_REV];
@@ -391,7 +427,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
     }
   }
 
-  class _LinkedListHashMapIterableBase extends _LinkedListIterableBase {
+  class _LinkedHashMapIterableBase extends _LinkedListIterableBase {
     constructor(map, fn = x => x) {
       super(map, fn);
       this[_MAP] = map;
@@ -400,12 +436,12 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return this[_MAP].size;
     }
     [Symbol.iterator]() {
-      return new _LinkedListHashMapIterator(this[_MAP], this[_FN]);
+      return new _LinkedHashMapIterator(this[_MAP], this[_FN]);
     }
   }
-  let _LinkedListHashMapIterable = iterables.EfficientLengthMixin(_LinkedListHashMapIterableBase);
+  let _LinkedHashMapIterable = iterables.EfficientLengthMixin(_LinkedHashMapIterableBase);
 
-  exports.LinkedListHashMap = class LinkedListHashMap extends HashMap {
+  exports.LinkedHashMap = class LinkedHashMap extends HashMap {
     constructor(sizeOrMap) {
       super(sizeOrMap);
     }
@@ -425,7 +461,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
       return result;
     }
     [_GEN_ITERABLE](fn = x => x) {
-      let result = new _LinkedListHashMapIterable(this, fn);
+      let result = new _LinkedHashMapIterable(this, fn);
       return result;
     }
   };
@@ -586,7 +622,6 @@ define('collection', ['core','iterables'], (core, iterables) => {
                         , 137438953447
                         , 274877906899
                         , Number.POSITIVE_INFINITY ];
-
   function nextBestPrime(num) {
     return primeSizes[binarySearch(num, primeSizes, (a,b) => a == b ? 0 : (a > b ? 1 : -1))];
   }
