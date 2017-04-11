@@ -72,25 +72,26 @@ define('collection', ['core','iterables'], (core, iterables) => {
     }
     // Get the new cell of an existing offset.
     [_GET_EXISTING_CELLS_NEW_OFFSET](hashable, butNot) {
-      let i = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      let i1 = (hashable.key.hashCode(this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
       let ixToInsert;
-      if (i != butNot) {
-        ixToInsert = i;
-        for (let ix = i;  ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+      if (i1 != butNot) {
+        ixToInsert = i1;
+        for (let ix = i1;  ix < i1 + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
           if (!this[_CELLS][ix]) {
             return {mustKick: false, ix: ix};
           }
         }
       }
-      i = (core.hashCode(hashable, this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
-      if (i != butNot) {
-        ixToInsert = i;
-        for (let ix = i;  ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
+      let i2 = (hashable.key.hashCode(this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      if (i2 != butNot || i1 == i2) {
+        ixToInsert = i2;
+        for (let ix = i2;  ix < i2 + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
           if (!this[_CELLS][ix]) {
             return {mustKick: false, ix: ix};
           }
         }
       }
+      assert(() => ixToInsert != null);
       return {mustKick: true, ix: ixToInsert};
     }
     [_GET_INSERT_OFFSET](hashable) {
@@ -118,6 +119,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
     }
     [_GET_LOOKUP_OFFSET](hashable) {
       let i = (core.hashCode(hashable, this[_SALT1]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      // console.log(`Looking for ${hashable} at index ${i}`);
       let firstIx = i, firstEmptyIx;
       for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
         if (!this[_CELLS][ix]) {
@@ -128,6 +130,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
         }
       }
       i = (core.hashCode(hashable, this[_SALT2]) % this[_SIZE]) * _CuckooHashCollection.MAX_ITEMS_PER_CELL;
+      // console.log(`Looking for ${hashable} at index ${i}`);
       for (let ix = i; ix < i + _CuckooHashCollection.MAX_ITEMS_PER_CELL; ix++) {
         if (!this[_CELLS][ix]) {
           break;
@@ -162,9 +165,11 @@ define('collection', ['core','iterables'], (core, iterables) => {
       let cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
       if (update) {
         this[_CELLS][ix].value = value;
+        return;
       }
       let insertionCell = this[_GEN_KVPAIR_CELL](new _HashCachingKey(hashable), value)
       // Can you kick it?
+      // console.log(`Inserting ${insertionCell.key.key} = ${insertionCell.value} -> ${ix}`);
       while (mustKick) {
         // Yes you can!
         let oldCell = this[_CELLS][ix];
@@ -177,6 +182,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
         }
         cuckooAttemptsRemaining--;
         ({mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](insertionCell = oldCell, butNot));
+        // console.log(`Relocating ${insertionCell.key.key} = ${insertionCell.value} -> ${ix}`);
       }
       this[_CELLS][ix] = insertionCell;
       this[_REV]++;
@@ -184,6 +190,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
     }
     [_REINSERT](cell) {
       let {mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](cell, -1);
+      // console.log(`Moving ${cell.key.key} = ${cell.value} -> ${ix} after resize`);
       let cuckooAttemptsRemaining = this[_MAX_ATTEMPTS];
       while (mustKick) {
         let oldCell = this[_CELLS][ix];
@@ -196,15 +203,18 @@ define('collection', ['core','iterables'], (core, iterables) => {
         }
         cuckooAttemptsRemaining--;
         ({mustKick, ix} = this[_GET_EXISTING_CELLS_NEW_OFFSET](cell = oldCell, butNot));
+        // console.log(`Relocating ${cell.key.key} = ${cell.value} -> ${ix} after resize (rare).`);
       }
       this[_CELLS][ix] = cell;
     }
 
     [_RESIZE](resalt = false) {
+      // console.log(`Resizing`);
       let oldCells = this[_CELLS];
       let oldSize = this[_SIZE];
       this[_SIZE] = nextBestPrime((oldSize / _CuckooHashCollection.BUMP_FACTOR)|0);
       if (resalt) {
+        // console.log(`Resalting`);
         this[_SALT1] = new core.HashSalt();
         this[_SALT2] = new core.HashSalt();
       }
