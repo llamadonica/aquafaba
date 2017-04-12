@@ -28,6 +28,93 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _INTERNAL_CLEAR = Symbol('_internalClear');
   const _REINSERT = Symbol('_reinsert');
   const _GET_LOOKUP_OFFSET_FOR_CACHE_KEY = Symbol('_getLookupOffsetForCacheKey');
+  const _ENTRIES = Symbol('_entries');
+  const _DELEGATE = Symbol('_delegate');
+  const _NATIVE_ENTRIES = Symbol('_nativeEntries');
+
+  class _WrapMapIterator {
+    constructor(map, delegate) {
+      this[_DELEGATE] = delegate;
+      this[_REV] = map[_REV];
+      this[_MAP] = map;
+    }
+    next() {
+      if (this[_REV] != this[_MAP][_REV]) {
+        throw new iterables.ConcurrentModificationException();
+      }
+      return this[_DELEGATE].next();
+    }
+  }
+  class _WrapMapIterableBase {
+    constructor(map) {
+      this[_ENTRIES] = map[_NATIVE_ENTRIES]();
+      this[_MAP] = map;
+    }
+    [Symbol.iterator]() {
+      return new _WrapMapIterator(this[_MAP], this[_ENTRIES][Symbol.iterator]());
+    }
+    get length() {
+      return this[_MAP].size;
+    }
+
+  }
+
+  let _WrapMapIterable = iterables.EfficientLengthMixin(_WrapMapIterableBase);
+
+  exports.WrapMap = class WrapMap extends Map {
+    constructor(sizeOrMap) {
+      if (sizeOrMap instanceof Map) {
+        super(sizeOrMap);
+      } else {
+        super();
+      }
+      if (sizeOrMap && sizeOrMap.entries) {
+        this.setAll(sizeOrMap);
+      }
+      this[_REV] = 0;
+    }
+    setAll(map) {
+      for (let [key,value] of map.entries()) {
+        this.set(key,value);
+      }
+    }
+    set(key, value) {
+      if (!this.has(key)) {
+        this[_REV]++;
+      }
+      super.set(key,value);
+    }
+    setIfAbsent(key, valueFactory) {
+      if (!this.has(key)) {
+        this[_REV]++;
+        super.set(key,valueFactory());
+      }
+    }
+    delete(key) {
+      if (this.has(key)) {
+        this[_REV]++;
+      }
+      super.delete(key);
+    }
+    clear() {
+      if (this.size > 0) {
+        this[_REV]++;
+      }
+      super.clear();
+    }
+    [_NATIVE_ENTRIES]() {
+      return super.entries();
+    }
+    entries() {
+      return new _WrapMapIterable(this);
+    }
+    keys() {
+      return this.entries().map(([key]) => key);
+    }
+    values() {
+      return this.entries().map(kvPair => kvPair[1]);
+    }
+  };
 
   /* A strut type to enable the key to be cached */
   class _HashCachingKey {
