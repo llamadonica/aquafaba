@@ -817,4 +817,346 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
     }
     return minimum + 1;
   }
+
+  const _LEFT = Symbol('_left');
+  const _RIGHT = Symbol('_right');
+  const _PARENT = Symbol('_parent');
+
+  const _CONTENTS = Symbol('_contents');
+  const _ROOT = Symbol('_root');
+  class _SplayTreeNode {
+    constructor(data) {
+      this[_LEFT] = null;
+      this[_RIGHT] = null;
+      this[_PARENT] = null;
+      this[_CONTENTS] = data;
+    }
+  }
+
+  const _OFFTRACK = Symbol('_offtrack');
+
+  class _SplayTreeIterator {
+    constructor(rootNode, fn = x => x) {
+      this[_REV] = rootNode[_REV];
+      this[_MAP] = rootNode;
+      this[_NEXT] = null;
+      this[_OFFTRACK] = true;
+      this[_FN] = fn;
+    }
+    next() {
+      if (this[_REV] != this[_MAP][_REV]) {
+        throw new iterables.ConcurrentModificationException(
+            'Map was modified during iteration.');
+      }
+      if (this[_OFFTRACK]) {
+        this[_NEXT] = this[_MAP][_LEFTMOST_CHILD];
+        if (this[_NEXT] == null) return {done: true};
+        this[_OFFTRACK] = false;
+        return {done: false, value: this[_FN](this[_NEXT])}
+      }
+      // We have right children. Go to the left-most child of our right node.
+      if (this[_NEXT][_RIGHT] != null) {
+        let temp = this[_NEXT][_RIGHT];
+        while (temp[_LEFT] != null) {
+          temp = temp[_LEFT];
+        }
+        this[_NEXT] = temp;
+        return {done: false, value: this[_FN](this[_NEXT])};
+      }
+      // We don't have right children. Our next node, is the lowest-level
+      // parent such that we are in its left branch.
+      var childBranch = this[_NEXT];
+      var parentBranch = childBranch[_PARENT];
+      for (;;) {
+        if (parentBranch == null) {
+          // We're not on any left branch, so we must be done.
+          this[_OFFTRACK] = true;
+          return {done: true};
+        }
+        if (parentBranch[_LEFT] == childBranch) {
+          this[_NEXT] = parentBranch;
+          return {done: false, value: this[_FN](this[_NEXT])};
+        }
+        childBranch = parentBranch;
+        parentBranch = childBranch[_PARENT];
+      }
+    }
+  }
+
+  class _SplayTreeIterableBase {
+    constructor(map, fn = x => x) {
+      this[_MAP] = map;
+      this[_FN] = fn;
+    }
+    get length() {
+      return this[_MAP][_COUNT];
+    }
+    [Symbol.iterator]() {
+      return new _SplayTreeIterator(this[_MAP], this[_FN]);
+    }
+  }
+  let _SplayTreeIterable = iterables.EfficientLengthMixin(_SplayTreeIterableBase);
+
+  const _COMPARISON_FN = Symbol('_comparisonFn');
+  const _GET_KEY = Symbol('_getKey');
+  const _GET_VALUE = Symbol('_getValue');
+  const _SPLAY = Symbol('_splay');
+  const _LEFTMOST_CHILD = Symbol('_leftmostChild');
+  const _RIGHTMOST_CHILD = Symbol('_rightmostChild');
+
+  class _SplayTree {
+    constructor(comparisonFn = _SplayTree.comparisonFn) {
+      this[_ROOT] = null;
+      this[_COUNT] = 0;
+      this[_REV] = 0;
+      this[_COMPARISON_FN] = comparisonFn;
+      this[_LEFTMOST_CHILD] = null;
+      this[_RIGHTMOST_CHILD] = null;
+    }
+    static comparisonFn(a, b) {
+      if (a < b) return -1;
+      if (a > b) return 1;
+      return 0;
+    }
+    [_REMOVE_AT](key) {
+      if (this[_COUNT] == 0) return null;
+      let c = this[_SPLAY](key);
+      if (c != 0) return null;
+
+      if (this[_ROOT] == this[_RIGHTMOST_CHILD]) {
+        this[_RIGHTMOST_CHILD] = this[_ROOT][_PARENT];
+      }
+      if (this[_ROOT] == this[_LEFTMOST_CHILD]) {
+        this[_LEFTMOST_CHILD] = this[_ROOT][_PARENT];
+      }
+
+      let originalValue = this[_GET_VALUE](this[_ROOT]);
+
+      if (this[_ROOT][_LEFT] == null) {
+        this[_ROOT] = this[_ROOT][_RIGHT];
+        if (this[_ROOT])
+          this[_ROOT][_PARENT] = null;
+      } else {
+        let swap = this[_ROOT][_RIGHT];
+
+        this[_ROOT] = this[_ROOT][_LEFT];
+        if (this[_ROOT])
+          this[_ROOT][_PARENT] = null;
+
+        this[_SPLAY](key);
+
+        this[_ROOT][_RIGHT] = swap;
+        if (swap)
+          swap[_PARENT] = this[_ROOT];
+      }
+      this[_REV]++;
+      this[_COUNT]--;
+      return originalValue;
+    }
+
+    [_UPSERT](contents, key) {
+      if (this[_COUNT] == 0) {
+        this[_REV]++;
+        this[_LEFTMOST_CHILD] =
+            this[_RIGHTMOST_CHILD] =
+            this[_ROOT] =
+            new _SplayTreeNode(contents);
+        this[_COUNT]++;
+        return;
+      }
+      let c = this[_SPLAY](key);
+      if (c == 0) {
+        this[_ROOT][_CONTENTS] = contents;
+        return;
+      }
+      let n = new _SplayTreeNode(contents);
+      if (c < 0) {
+        if (this[_ROOT] == this[_LEFTMOST_CHILD]) {
+          this[_LEFTMOST_CHILD] = n;
+        }
+        n[_LEFT] = this[_ROOT][_LEFT];
+        n[_RIGHT] = this[_ROOT];
+        if (n[_LEFT])
+          n[_LEFT][_PARENT] = n;
+        n[_RIGHT][_PARENT] = n;
+
+        this[_ROOT][_LEFT] = null;
+      } else {
+        if (this[_ROOT] == this[_RIGHTMOST_CHILD]) {
+          this[_RIGHTMOST_CHILD] = n;
+        }
+        n[_RIGHT] = this[_ROOT][_RIGHT];
+        n[_LEFT] = this[_ROOT];
+        n[_LEFT][_PARENT] = n;
+        if (n[_RIGHT])
+          n[_RIGHT][_PARENT] = n;
+        this[_ROOT][_RIGHT] = null;
+      }
+      this[_REV]++;
+      this[_ROOT] = n;
+      this[_COUNT] ++;
+    }
+    [_SPLAY](key) {
+      let t = this[_ROOT];
+      let r; let l; let lFirst; let rFirst;
+      core.assert(() => t != null, '_root must not be null');
+      let c;
+      for (;;) {
+        // To prevent duplicate calls on the same cell. Be sure to
+        c = this[_COMPARISON_FN](key, this[_GET_KEY](t));
+        if (c < 0 && t[_LEFT] == null) {
+          break;
+        } else if (c < 0) {
+          let ci = this[_COMPARISON_FN](key, this[_GET_KEY](t[_LEFT]));
+          if (ci < 0) {
+            let y = t[_LEFT];
+            t[_LEFT] = y[_RIGHT];
+            if (t[_LEFT])
+              t[_LEFT][_PARENT] = t;
+            y[_RIGHT] = t;
+            t[_PARENT] = y;
+            t = y;
+            if (!t[_LEFT]) {
+              c = ci;
+              break;
+            }
+          }
+          if (r) {
+            r[_LEFT] = t;
+            t[_PARENT] = r;
+          } else {
+            lFirst = t;
+          }
+          r = t;
+          t = t[_LEFT];
+        } else if (c > 0 && t[_RIGHT] == null) {
+          break;
+        } else if (c >0){
+          let ci = this[_COMPARISON_FN](key, this[_GET_KEY](t[_RIGHT]));
+          if (ci > 0) {
+            let y = t[_RIGHT];
+            t[_RIGHT] = y[_LEFT];
+            if (t[_RIGHT])
+              t[_RIGHT][_PARENT] = t;
+            y[_LEFT] = t;
+            t[_PARENT] = y;
+            t = y;
+            if (!t[_RIGHT]) {
+              c = ci;
+              break;
+            }
+          }
+          if (l) {
+            l[_RIGHT] = t;
+            t[_PARENT] = l;
+          } else {
+            rFirst = t;
+          }
+          l = t;
+          t = t[_RIGHT];
+        } else {
+          break;
+        }
+      }
+      if (l) {
+        l[_RIGHT] = t[_LEFT];
+        t[_LEFT] = rFirst;
+        rFirst[_PARENT] = t;
+        if (l[_RIGHT])
+          l[_RIGHT][_PARENT] = l;
+      }
+      if (r) {
+        r[_LEFT] = t[_RIGHT];
+        t[_RIGHT] = lFirst;
+        lFirst[_PARENT] = t;
+        if (r[_LEFT])
+          r[_LEFT][_PARENT] = r;
+      }
+      this[_ROOT] = t;
+      t[_PARENT] = null;
+      return c;
+    }
+  }
+
+  class _SplayTreeMapCell {
+    constructor(key, value) {
+      this[_KEY] = key;
+      this[_VALUE] = value;
+    }
+    get key() {
+      return this[_KEY];
+    }
+    get value() {
+      return this[_VALUE];
+    }
+  }
+
+  module.exports.SplayTreeMap = class SplayTreeMap extends _SplayTree {
+    constructor(sizeOrMap, comparisonFn = _SplayTree.comparisonFn) {
+      super(comparisonFn);
+      if (sizeOrMap && sizeOrMap.keys && sizeOrMap.get) {
+        for (let [key, value] of sizeOrMap.entries()) {
+          this.set(key, value);
+        }
+      }
+    }
+    get size() {
+      return this[_COUNT];
+    }
+    get(key) {
+      if (this[_COUNT] == 0) return null;
+      let c = this[_SPLAY](key);
+      if (c != 0) return null;
+      return this[_ROOT][_CONTENTS][_VALUE];
+    }
+    has(key) {
+      if (this[_COUNT] == 0) return null;
+      let c = this[_SPLAY](key);
+      return c == 0;
+    }
+    set(key, value) {
+      let contents = new _SplayTreeMapCell(key, value);
+      this[_UPSERT](contents, key);
+    }
+    setIfAbsent(key, valueFactory) {
+      if (!this.has(key)) {
+        this.set(key, valueFactory())
+      }
+    }
+    delete(key) {
+      var contents = this[_REMOVE_AT](key);
+      if (contents == null) return null;
+      return contents.value;
+    }
+    [_GET_VALUE](contents) {
+      return contents[_CONTENTS].value;
+    }
+    [_GET_KEY](contents) {
+      return contents[_CONTENTS].key;
+    }
+    setAll(map) {
+      for (let [key, value] of map.entries()) {
+        this.set(key, value);
+      }
+    }
+    [_GEN_ITERABLE](fn = x => x) {
+      return new _SplayTreeIterable(this, fn);
+    }
+    entries() {
+      return this[_GEN_ITERABLE]((x) => [x[_CONTENTS].key, x[_CONTENTS].value]);
+    }
+    keys() {
+      return this[_GEN_ITERABLE]((x) => x[_CONTENTS].key);
+    }
+    values() {
+      return this[_GEN_ITERABLE]((x) => x[_CONTENTS].value);
+    }
+    forEach(callback, thisArg) {
+      return this[_GEN_ITERABLE]((x) => x[_CONTENTS]).forEach((entry) => {
+        callback.apply(thisArg, [entry.value, entry.key]);
+      });
+
+    }
+
+  }
 });

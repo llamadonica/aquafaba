@@ -72,7 +72,7 @@ define(['collection', 'iterables'], function (collection, iterables) {
         });
       });
     }
-    function testMap(mapFactory, testName) {
+    function testMap(mapFactory, testName, notNullSafe = false) {
       suite(testName, () => {
         test(`Basic getting and setting for ${testName}`, function (done) {
           var x = new collection.HashMap();
@@ -256,72 +256,75 @@ define(['collection', 'iterables'], function (collection, iterables) {
           }
           done();
         });
-        test('Null can be used as key', (done) => {
-          let map = mapFactory();
-          map.set(null,0)
-          assert.equal(1, map.size);
-          assert.isTrue(map.has(null));
-          assert.isNull(map.keys().first);
-          assert.isNull(map.keys().last);
-          map.set(null,1);
-          assert.equal(1, map.size);
-          assert.isTrue(map.has(null));
-          map.delete(null);
-          assert.isTrue(map.entries().isEmpty);
-          assert.isFalse(map.has(null));
+        if (!notNullSafe) {
+          test('Null can be used as key', (done) => {
+            let map = mapFactory();
+            map.set(null,0)
+            assert.equal(1, map.size);
+            assert.isTrue(map.has(null));
+            assert.isNull(map.keys().first);
+            assert.isNull(map.keys().last);
+            map.set(null,1);
+            assert.equal(1, map.size);
+            assert.isTrue(map.has(null));
+            map.delete(null);
+            assert.isTrue(map.entries().isEmpty);
+            assert.isFalse(map.has(null));
 
-          // Created using map.from.
-          map = mapFactory((() => {
+            // Created using map.from.
+            map = mapFactory((() => {
+              let innerMap = new collection.HashMap();
+              innerMap.set(null, 1);
+              return innerMap;
+            })());
+            assert.equal(1, map.size);
+            assert.isTrue(map.has(null));
+            assert.isNull(map.keys().first);
+            assert.isNull(map.keys().last);
+            map.set(null, 2);
+            assert.equal(1, map.size);
+            assert.isTrue(map.has(null));
+            map.delete(null);
+            assert.isTrue(map.entries().isEmpty);
+            assert.isFalse(map.has(null));
+
             let innerMap = new collection.HashMap();
-            innerMap.set(null, 1);
-            return innerMap;
-          })());
-          assert.equal(1, map.size);
-          assert.isTrue(map.has(null));
-          assert.isNull(map.keys().first);
-          assert.isNull(map.keys().last);
-          map.set(null, 2);
-          assert.equal(1, map.size);
-          assert.isTrue(map.has(null));
-          map.delete(null);
-          assert.isTrue(map.entries().isEmpty);
-          assert.isFalse(map.has(null));
-
-          let innerMap = new collection.HashMap();
-          innerMap.set(1,0);
-          innerMap.set(2,0);
-          innerMap.set(3,0);
-          innerMap.set(null, 0);
-          innerMap.set(4,0);
-          innerMap.set(5,0);
-          innerMap.set(6,0);
-          assert.equal(7, innerMap.size);
-          map = mapFactory(innerMap);
-          for (let i = 7; i < 128; i++) {
-            map.set(i,0);
-          }
-          assert.equal(128, map.size);
-          assert.isTrue(map.has(null));
-          map.set(null, 1);
-          assert.equal(128, map.size);
-          assert.isTrue(map.has(null));
-          map.delete(null);
-          assert.equal(127, map.size);
-          assert.isFalse(map.has(null));
-          done();
-        });
+            innerMap.set(1,0);
+            innerMap.set(2,0);
+            innerMap.set(3,0);
+            innerMap.set(null, 0);
+            innerMap.set(4,0);
+            innerMap.set(5,0);
+            innerMap.set(6,0);
+            assert.equal(7, innerMap.size);
+            map = mapFactory(innerMap);
+            for (let i = 7; i < 128; i++) {
+              map.set(i,0);
+            }
+            assert.equal(128, map.size);
+            assert.isTrue(map.has(null));
+            map.set(null, 1);
+            assert.equal(128, map.size);
+            assert.isTrue(map.has(null));
+            map.delete(null);
+            assert.equal(127, map.size);
+            assert.isFalse(map.has(null));
+            done();
+          });
+        }
       });
     }
     test('Loads', function (done) {
       done();
     });
     suite('Maps', () => {
-      for (let {name, mapFactory} of [
+      for (let {name, mapFactory, notNullSafe} of [
         {name: 'HashMap', mapFactory: (map) => new collection.HashMap(map)},
         {name: 'LinkedHashMap', mapFactory: (map) => new collection.LinkedHashMap(map)},
+        {name: 'SplayTreeMap', mapFactory: (map) => new collection.SplayTreeMap(map), notNullSafe: true},
         {name: 'native Map', mapFactory: (map) => new collection.WrapMap(map)},
       ]) {
-        testMap(mapFactory, name);
+        testMap(mapFactory, name, notNullSafe);
       }
     });
   });
