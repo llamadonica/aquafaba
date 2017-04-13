@@ -1,3 +1,5 @@
+(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
+c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 define(['convert'], function (convert) {
   function uint8Equals(valueA, valueB) {
     var iterA = valueA[Symbol.iterator]();
