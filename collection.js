@@ -3,6 +3,9 @@
  * Copyright (c) 2017 Adam Stark. All rights reserved.
  * This code may only be used under the BSD style license found at LICENSE.txt
  */
+(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
+c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
+
 define('collection', ['core','iterables'], (core, iterables) => {
   let exports = {};
 
