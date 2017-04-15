@@ -1,10 +1,10 @@
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define('convert', ['core'], function(core) {
-  var exports = {};
+define('convert', ['core', 'module'], function(core, module) {
+  module.exports = {};
 
-  var Converter = exports.Converter = class Converter extends Object {
+  var Converter = module.exports.Converter = class Converter extends Object {
     constructor() {
       super();
     }
@@ -13,7 +13,7 @@ define('convert', ['core'], function(core) {
     }
   };
 
-  exports.Utf8Encoder = class Utf8Encoder
+  module.exports.Utf8Encoder = class Utf8Encoder
       extends Converter {
     convert(value) {
       let utf8 = [];
@@ -44,7 +44,7 @@ define('convert', ['core'], function(core) {
     }
   };
 
-  exports.Utf8Decoder = class Utf8Decoder
+  module.exports.Utf8Decoder = class Utf8Decoder
       extends Converter {
     convert(value, tolerant = false) {
       let stringResult = '';
@@ -96,7 +96,7 @@ define('convert', ['core'], function(core) {
     'S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j',
     'k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1',
     '2','3','4','5','6','7','8','9','+','/',];
-  exports.Base64Encoder = class Base64Encoder
+  module.exports.Base64Encoder = class Base64Encoder
       extends Converter {
     constructor() { super(); }
     convert(value) {
@@ -147,7 +147,7 @@ define('convert', ['core'], function(core) {
     }
   };
 
-  exports.Base64Decoder = class Base64Decoder
+  module.exports.Base64Decoder = class Base64Decoder
       extends Converter {
     constructor() { super(); }
     static get BASE64_CODE_TO_INT() {
@@ -173,7 +173,7 @@ define('convert', ['core'], function(core) {
       let currentNumber = 0;
       for (let i = 0; i < value.length; i++) {
         let char = value.substr(i, 1);
-        let charIndex = exports.Base64Decoder.BASE64_CODE_TO_INT[char];
+        let charIndex = module.exports.Base64Decoder.BASE64_CODE_TO_INT[char];
         if (char == '=' ) {
           if (round != 0 && round < 4) {
             currentNumber <<= ((4 - round)*6);
@@ -226,6 +226,4 @@ define('convert', ['core'], function(core) {
       this.message = message;
     }
   }
-  return exports;
-
 });

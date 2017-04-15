@@ -6,8 +6,8 @@
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define('collection', ['core','iterables'], (core, iterables) => {
-  let exports = {};
+define('collection', ['core','iterables', 'module'], (core, iterables, module) => {
+  module.exports = {};
 
   const _SIZE = Symbol('_size');
   const _SALT1 = Symbol('_salt1');
@@ -64,7 +64,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
 
   let _WrapMapIterable = iterables.EfficientLengthMixin(_WrapMapIterableBase);
 
-  exports.WrapMap = class WrapMap extends Map {
+  module.exports.WrapMap = class WrapMap extends Map {
     constructor(sizeOrMap) {
       if (sizeOrMap instanceof Map) {
         super(sizeOrMap);
@@ -256,7 +256,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
           break;
         }
         if (core.equals(hashable, this[_GET_CELL_HASHABLE](this[_CELLS][ix]).key)) {
-          ix;
+          return ix;
         }
       }
       return -1;
@@ -486,7 +486,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
   const _GEN_KVPAIR_CELL = Symbol('_genKVPair');
   const _GEN_ITERABLE = Symbol('_genIterable');
 
-  let HashMap = exports.HashMap = class HashMap extends _CuckooHashCollection {
+  let HashMap = module.exports.HashMap = class HashMap extends _CuckooHashCollection {
     constructor(sizeOrMap) {
       let size = 1;
       if (typeof sizeOrMap === 'number') {
@@ -612,7 +612,7 @@ define('collection', ['core','iterables'], (core, iterables) => {
   }
   let _LinkedHashMapIterable = iterables.EfficientLengthMixin(_LinkedHashMapIterableBase);
 
-  exports.LinkedHashMap = class LinkedHashMap extends HashMap {
+  module.exports.LinkedHashMap = class LinkedHashMap extends HashMap {
     constructor(sizeOrMap) {
       super(sizeOrMap);
     }
@@ -817,6 +817,4 @@ define('collection', ['core','iterables'], (core, iterables) => {
     }
     return minimum + 1;
   }
-
-  return exports;
 });

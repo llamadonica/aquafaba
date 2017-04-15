@@ -37,10 +37,10 @@
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define('core', [], function () {
-  var exports = {};
+define('core', ['module'], function (module) {
+  module.exports = {};
 
-  let AssertionException = exports.AssertionException =
+  let AssertionException = module.exports.AssertionException =
       class AssertionException {
     constructor(message) {
       this.message = message;
@@ -50,10 +50,10 @@ define('core', [], function () {
     }
   }
 
-  exports.assert = (fn, message) => {
+  module.exports.assert = (fn, message) => {
     if (!fn()) throw new AssertionException(message || 'Assertion failed');
   };
-  exports.makeGenericType = (fn) => {
+  module.exports.makeGenericType = (fn) => {
     let typeMap = new WeakMap();
     let onlyType;
     return (...typeArgs) => {
@@ -84,7 +84,7 @@ define('core', [], function () {
     }
   };
 
-  exports.lazyGet = (fn) => {
+  module.exports.lazyGet = (fn) => {
     let value;
     return () => {
       if (value === undefined) {
@@ -93,11 +93,12 @@ define('core', [], function () {
       return value;
     }
   };
-  exports.equals = (that, other) => {
+  module.exports.equals = (that, other) => {
     if (that == null && other == null) return true;
+    if (that == null || other == null) return false;
     if (Number.isNaN(that) && Number.isNaN(other)) return true;
-    if (that[exports.equalOperator]) {
-      return that[exports.equalOperator](other);
+    if (that[module.exports.equalOperator]) {
+      return that[module.exports.equalOperator](other);
     }
     return that === other;
   };
@@ -114,7 +115,7 @@ define('core', [], function () {
   let _SALT = Symbol('_salt');
   let _FIRSTCOMMON = Symbol('_common1');
   let _SECONDCOMMON = Symbol('_common2');
-  exports.HashSalt = class HashSalt {
+  module.exports.HashSalt = class HashSalt {
     constructor() {
       this[_SALT] =  (Math.random() * 0x1fffffff)|0;
     }
@@ -134,7 +135,7 @@ define('core', [], function () {
    * @param {HashSalt} salt
    * @return {int}
    */
-  exports.hashCode = (value, salt) => {
+  module.exports.hashCode = (value, salt) => {
     if (value == null) return nullHashCode(salt.salt)|0;
     let hashCode;
     if (typeof value === 'string') {
@@ -164,9 +165,9 @@ define('core', [], function () {
     return hashCode;
   }
 
-  exports.getOperator = Symbol('operator[]');
-  exports.setOperator = Symbol('operator[]=');
-  exports.equalOperator = Symbol('operator==');
+  module.exports.getOperator = Symbol('operator[]');
+  module.exports.setOperator = Symbol('operator[]=');
+  module.exports.equalOperator = Symbol('operator==');
 
   function floatHashCode(value, hash = 0) {
     let array = new Int32Array(new Float64Array([value]).buffer);
@@ -204,20 +205,18 @@ define('core', [], function () {
     }
     return Math.random() * 0x1fffffff | 0;
   }
-  exports.stringHashCode = stringHashCode;
+  module.exports.stringHashCode = stringHashCode;
 
-  exports.classHasMethod = (clazz, name) => {
+  module.exports.classHasMethod = (clazz, name) => {
     return _prototypeHasMethod(clazz.prototype, name);
   };
   function _prototypeHasMethod(proto, name) {
     return proto && (proto[name] || _prototypeHasMethod(proto.__proto__, name));
   }
-  exports.classHasProperty = (clazz, name) => {
+  module.exports.classHasProperty = (clazz, name) => {
     return _prototypeHasProperty(clazz.prototype, name);
   };
   function _prototypeHasProperty(proto, name) {
     return proto && (proto.hasOwnProperty(name) || _prototypeHasProperty(proto.__proto__, name));
   }
-
-  return exports;
 });

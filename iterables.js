@@ -20,9 +20,9 @@
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define('iterables', ['core'], (core) => {
-  let exports = {};
-  exports.Iterable = class Iterable {
+define('iterables', ['core', 'module'], (core, module) => {
+  module.exports = {};
+  module.exports.Iterable = class Iterable {
     static [Symbol.hasInstance](obj) {
       return (!!obj[Symbol.iterator]);
     }
@@ -45,7 +45,7 @@ define('iterables', ['core'], (core) => {
     }
   }
 
-  exports.ConcurrentModificationException =
+  module.exports.ConcurrentModificationException =
       class ConcurrentModificationException {
     constructor(message) {
       this.message = message;
@@ -54,7 +54,7 @@ define('iterables', ['core'], (core) => {
       return `ConcurrentModificationException: ${this.message}`;
     }
   };
-  let IterableException = exports.IterableException = class IterableException {
+  let IterableException = module.exports.IterableException = class IterableException {
     constructor(message) {
       this.message = message;
     }
@@ -65,7 +65,7 @@ define('iterables', ['core'], (core) => {
 
   let _DELEGATE = Symbol('_delegate');
   let _FILTER_BASE = Symbol('_filterBase');
-  let WrapIterableBase = exports.WrapIterableBase = class WrapIterableBase {
+  let WrapIterableBase = module.exports.WrapIterableBase = class WrapIterableBase {
     constructor(delegate) {
       this[_DELEGATE] = delegate;
     }
@@ -75,7 +75,7 @@ define('iterables', ['core'], (core) => {
   }
   let _LENGTH = Symbol('_length');
   let WrapIterableEfficientLengthBase =
-      exports.WrapIterableEfficientLengthBase =
+      module.exports.WrapIterableEfficientLengthBase =
       class WrapIterableEfficientLengthBase extends WrapIterableBase {
     constructor(delegate, length) {
       super(delegate);
@@ -89,7 +89,7 @@ define('iterables', ['core'], (core) => {
    * A utility mixin, designed to implement a lot of convenience methods
    * for any type that already implements Iterable.
    */
-  let EfficientLengthMixin = exports.EfficientLengthMixin =
+  let EfficientLengthMixin = module.exports.EfficientLengthMixin =
       core.makeGenericType(_EfficientLengthMixiner);
   function _EfficientLengthMixiner(p) {
     let mixedin = class extends p {
@@ -142,7 +142,7 @@ define('iterables', ['core'], (core) => {
     }
     return _IterableMixiner(mixedin);
   }
-  let IterableMixin = exports.IterableMixin = core.makeGenericType(_IterableMixiner);
+  let IterableMixin = module.exports.IterableMixin = core.makeGenericType(_IterableMixiner);
   function _IterableMixiner(p) {
     let mixedin = class extends p {
       constructor(...args) {
@@ -196,11 +196,13 @@ define('iterables', ['core'], (core) => {
         get last() {
           let iterator = this[Symbol.iterator]();
           let {value, done} = iterator.next();
+          let nextValue;
           if (done) {
             throw new IterableException('Iterable had no elements.');
           }
           while(!done) {
-            ({value, done} = iterator.next());
+            ({value: nextValue, done} = iterator.next());
+            value = done ? value : nextValue;
           }
           return value;
         }
@@ -409,6 +411,4 @@ define('iterables', ['core'], (core) => {
     // TODO: implement skip, skipWhile, take, takeWhile
     // and lastIndexOf
   }
-
-  return exports;
 });

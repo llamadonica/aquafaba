@@ -211,17 +211,118 @@ define(['collection', 'iterables'], function (collection, iterables) {
           assert.isTrue(map.has("h"));
           done();
         });
+        test('Put if absent works as well as set', (done) => {
+          let map = mapFactory();
+          for (let i = 0; i < 128; i++) {
+            map.setIfAbsent(i, () => i);
+            assert.isTrue(map.has(i));
+            map.setIfAbsent(i, () => -1);
+          }
+          map.entries().forEach(([key, value]) => assert.equal(key, value));
+          done();
+        });
+        test('Updating exisitng elements is not a modification.', (done) => {
+          for (let i = 1; i < 128; i++) {
+            let map = mapFactory(mapGen(0,i));
+            map.forEach((value, key) => {
+              assert.equal(key, map.get(key));
+              map.set(key, key + 1);
+              map.delete(1000);
+              map.setIfAbsent(key, () => {throw "SHOULD NOT BE EMPTY."});
+            });
+            for (let key of map.keys()) {
+              assert.equal(key + 1, map.get(key));
+              map.set(key, map.get(key) + 1);
+              map.delete(1000);
+              map.setIfAbsent(key, () => {throw "SHOULD NOT BE EMPTY."});
+            }
+            let iterator = map.entries()[Symbol.iterator]();
+            iterator.next();
+            for (let key = 0; key < i; key++) {
+              assert.equal(key + 2, map.get(key));
+              map.set(key, key + 3);
+              map.delete(1000);
+              map.setIfAbsent(key, () => {throw "SHOULD NOT BE EMPTY."});
+            }
+            iterator.next();
+            for (let key = 1; key < i; key++) {
+              assert.equal(key + 3, map.get(key));
+              map.delete(key);
+            }
+            iterator = map.keys()[Symbol.iterator]();
+            iterator.next();
+            map.set(0,2);
+            iterator.next();
+          }
+          done();
+        });
+        test('Null can be used as key', (done) => {
+          let map = mapFactory();
+          map.set(null,0)
+          assert.equal(1, map.size);
+          assert.isTrue(map.has(null));
+          assert.isNull(map.keys().first);
+          assert.isNull(map.keys().last);
+          map.set(null,1);
+          assert.equal(1, map.size);
+          assert.isTrue(map.has(null));
+          map.delete(null);
+          assert.isTrue(map.entries().isEmpty);
+          assert.isFalse(map.has(null));
+
+          // Created using map.from.
+          map = mapFactory((() => {
+            let innerMap = new collection.HashMap();
+            innerMap.set(null, 1);
+            return innerMap;
+          })());
+          assert.equal(1, map.size);
+          assert.isTrue(map.has(null));
+          assert.isNull(map.keys().first);
+          assert.isNull(map.keys().last);
+          map.set(null, 2);
+          assert.equal(1, map.size);
+          assert.isTrue(map.has(null));
+          map.delete(null);
+          assert.isTrue(map.entries().isEmpty);
+          assert.isFalse(map.has(null));
+
+          let innerMap = new collection.HashMap();
+          innerMap.set(1,0);
+          innerMap.set(2,0);
+          innerMap.set(3,0);
+          innerMap.set(null, 0);
+          innerMap.set(4,0);
+          innerMap.set(5,0);
+          innerMap.set(6,0);
+          assert.equal(7, innerMap.size);
+          map = mapFactory(innerMap);
+          for (let i = 7; i < 128; i++) {
+            map.set(i,0);
+          }
+          assert.equal(128, map.size);
+          assert.isTrue(map.has(null));
+          map.set(null, 1);
+          assert.equal(128, map.size);
+          assert.isTrue(map.has(null));
+          map.delete(null);
+          assert.equal(127, map.size);
+          assert.isFalse(map.has(null));
+          done();
+        });
       });
     }
     test('Loads', function (done) {
       done();
     });
-    for (let {name, mapFactory} of [
-      {name: 'HashMap', mapFactory: (map) => new collection.HashMap(map)},
-      {name: 'LinkedHashMap', mapFactory: (map) => new collection.LinkedHashMap(map)},
-      {name: 'native Map', mapFactory: (map) => new collection.WrapMap(map)},
-    ]) {
-      testMap(mapFactory, name);
-    }
+    suite('Maps', () => {
+      for (let {name, mapFactory} of [
+        {name: 'HashMap', mapFactory: (map) => new collection.HashMap(map)},
+        {name: 'LinkedHashMap', mapFactory: (map) => new collection.LinkedHashMap(map)},
+        {name: 'native Map', mapFactory: (map) => new collection.WrapMap(map)},
+      ]) {
+        testMap(mapFactory, name);
+      }
+    });
   });
 });
