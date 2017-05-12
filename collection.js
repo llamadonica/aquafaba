@@ -903,6 +903,8 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
   const _SPLAY = Symbol('_splay');
   const _LEFTMOST_CHILD = Symbol('_leftmostChild');
   const _RIGHTMOST_CHILD = Symbol('_rightmostChild');
+  const _INEQUALITY_QUERY = Symbol('_inequalityQuery');
+  const _CHECK_ALL_CELLS = Symbol('_checkAllCells');
 
   class _SplayTree {
     constructor(comparisonFn = _SplayTree.comparisonFn) {
@@ -917,6 +919,24 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
       if (a < b) return -1;
       if (a > b) return 1;
       return 0;
+    }
+    [_CHECK_ALL_CELLS]() {
+      return;
+      /*
+      let visited = new Set();
+      function checkNonRoot (cell, parent) {
+        core.assert(() => !visited.has(cell), `cell at ${cell[_CONTENTS][_KEY]} is reachable 2 ways`);
+        visited.add(cell);
+        core.assert(() => cell[_PARENT] === parent, `cell at ${cell[_CONTENTS][_KEY]} does not know his parent`) ;
+        if (cell[_LEFT]) checkNonRoot(cell[_LEFT], cell);
+        if (cell[_RIGHT]) checkNonRoot(cell[_RIGHT], cell);
+        return true;
+      }
+      let originalThis = this;
+      core.assert(() => checkNonRoot(originalThis[_ROOT], null));
+      core.assert(() => visited.size == originalThis[_COUNT], `tree is not the correct size`);
+      */
+
     }
     [_REMOVE_AT](key) {
       if (this[_COUNT] == 0) return null;
@@ -937,20 +957,33 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
         if (this[_ROOT])
           this[_ROOT][_PARENT] = null;
       } else {
-        let swap = this[_ROOT][_RIGHT];
-
-        this[_ROOT] = this[_ROOT][_LEFT];
-        if (this[_ROOT])
-          this[_ROOT][_PARENT] = null;
-
-        this[_SPLAY](key);
-
-        this[_ROOT][_RIGHT] = swap;
-        if (swap)
-          swap[_PARENT] = this[_ROOT];
+        let newRight = this[_ROOT][_RIGHT];
+        let newLeft = this[_ROOT][_LEFT];
+        let temp = newLeft;
+        while (temp[_RIGHT] != null) {
+          temp = temp[_RIGHT];
+        }
+        if (temp != newLeft) {
+          temp[_PARENT][_RIGHT] = temp[_LEFT];
+          if (temp[_LEFT]) {
+            temp[_LEFT][_PARENT] = temp[_PARENT];
+          }
+          temp[_LEFT] = newLeft;
+          newLeft[_PARENT] = temp;
+        } // Otherwise, left has no right branches.
+        temp[_RIGHT] = newRight;
+        if (newRight) {
+          newRight[_PARENT] = temp;
+        }
+        this[_ROOT] = temp;
+        temp[_PARENT] = null;
+        // this[_SPLAY](key);
+        // We don't need to do a full splay here because we know how it will
+        // turn out.
       }
       this[_REV]++;
       this[_COUNT]--;
+      this[_CHECK_ALL_CELLS]();
       return originalValue;
     }
 
@@ -995,7 +1028,9 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
       this[_REV]++;
       this[_ROOT] = n;
       this[_COUNT] ++;
+      this[_CHECK_ALL_CELLS]();
     }
+
     [_SPLAY](key) {
       let t = this[_ROOT];
       let r; let l; let lFirst; let rFirst;
@@ -1074,7 +1109,44 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
       }
       this[_ROOT] = t;
       t[_PARENT] = null;
+      this[_CHECK_ALL_CELLS]();
       return c;
+    }
+    [_INEQUALITY_QUERY](key, offTargetCheck, proximalKey, distalKey) {
+      if (this[_COUNT] == 0) return null;
+      let c = this[_SPLAY](key);
+      // If the root is already bigger than the key return it.
+      if (offTargetCheck(c)) {
+        // We should really resplay here, because the odds are that the next
+        // lookup will be for the same key again.
+        let closerCentroid = this[_ROOT][distalKey];
+        let temp = closerCentroid;
+        if (closerCentroid == null) return null;
+        while (temp[proximalKey] != null) {
+          temp = temp[proximalKey];
+        }
+        // temp._left must be null.
+        // Move any right children af our node, to be the new immediate child
+        // of p1
+        if (temp != closerCentroid) {
+          temp[_PARENT][proximalKey] = temp[distalKey];
+          if (temp[distalKey]) {
+            temp[distalKey][_PARENT] = temp[_PARENT];
+          }
+          temp[distalKey] = closerCentroid;
+          closerCentroid[_PARENT] = temp;
+        }
+        // Move the old root to be the new root's left branch.
+        temp[proximalKey] = this[_ROOT];
+        this[_ROOT][_PARENT] = temp;
+        // Move the right of the old root to be the right of the new branch.
+        this[_ROOT][distalKey] = null;
+        // Make the new root the root
+        this[_ROOT] = temp;
+        temp[_PARENT] = null;
+      }
+      this[_CHECK_ALL_CELLS]();
+      return this[_ROOT];
     }
   }
 
@@ -1090,6 +1162,7 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
       return this[_VALUE];
     }
   }
+
 
   module.exports.SplayTreeMap = class SplayTreeMap extends _SplayTree {
     constructor(sizeOrMap, comparisonFn = _SplayTree.comparisonFn) {
@@ -1155,7 +1228,17 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
       return this[_GEN_ITERABLE]((x) => x[_CONTENTS]).forEach((entry) => {
         callback.apply(thisArg, [entry.value, entry.key]);
       });
+    }
 
+    firstEntryAfter(key) {
+      let result = this[_INEQUALITY_QUERY](key, (c) => c >= 0, _LEFT, _RIGHT);
+      if (result == null) return null;
+      return [result[_CONTENTS].key, result[_CONTENTS].value]
+    }
+    lastEntryBefore(key) {
+      let result = this[_INEQUALITY_QUERY](key, (c) => c <= 0, _RIGHT, _LEFT);
+      if (result == null) return null;
+      return [result[_CONTENTS].key, result[_CONTENTS].value]
     }
 
   }

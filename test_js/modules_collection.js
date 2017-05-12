@@ -327,5 +327,24 @@ define(['collection', 'iterables'], function (collection, iterables) {
         testMap(mapFactory, name, notNullSafe);
       }
     });
+    suite('O(log n) collections', () => {
+      test('Before-and-after checks', (done) => {
+        let map = new collection.SplayTreeMap();
+        map.set(1,1);
+        map.set(25,25);
+        map.set(27,27);
+        map.set(34,34);
+        map.set(99,99);
+        assert.deepEqual(map.firstEntryAfter(24),[25,25]);
+        assert.deepEqual(map.firstEntryAfter(26),[27,27]);
+        assert.deepEqual(map.firstEntryAfter(50),[99,99]);
+        assert.deepEqual(map.firstEntryAfter(0),[1,1]);
+        assert.deepEqual(map.lastEntryBefore(24),[1,1]);
+        assert.deepEqual(map.lastEntryBefore(26),[25,25]);
+        assert.deepEqual(map.lastEntryBefore(50),[34,34]);
+        assert.deepEqual(map.lastEntryBefore(0),null);
+        done();
+      });
+    });
   });
 });

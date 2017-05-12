@@ -51,7 +51,8 @@ define('core', ['module'], function (module) {
   }
 
   module.exports.assert = (fn, message) => {
-    if (!fn()) throw new AssertionException(message || 'Assertion failed');
+    if (!fn())
+      throw new AssertionException(message || 'Assertion failed');
   };
   module.exports.makeGenericType = (fn) => {
     let typeMap = new WeakMap();
