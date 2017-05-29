@@ -944,10 +944,18 @@ define('collection', ['core','iterables', 'module'], (core, iterables, module) =
       if (c != 0) return null;
 
       if (this[_ROOT] == this[_RIGHTMOST_CHILD]) {
-        this[_RIGHTMOST_CHILD] = this[_ROOT][_PARENT];
+        let next = this[_ROOT][_LEFT];
+        while (next && next[_RIGHT]) {
+          next = next[_RIGHT];
+        }
+        this[_RIGHTMOST_CHILD] = next;
       }
       if (this[_ROOT] == this[_LEFTMOST_CHILD]) {
-        this[_LEFTMOST_CHILD] = this[_ROOT][_PARENT];
+        let next = this[_ROOT][_RIGHT];
+        while (next && next[_LEFT]) {
+          next = next[_LEFT];
+        }
+        this[_LEFTMOST_CHILD] = next;
       }
 
       let originalValue = this[_GET_VALUE](this[_ROOT]);
