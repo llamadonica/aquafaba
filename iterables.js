@@ -17,10 +17,21 @@
  * @callback Lazy
  * @return {!any}
  */
-(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
-c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
-
-define('iterables', ['core', 'module'], (core, module) => {
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define(["./core.js", "module"], factory);
+  } else if(typeof module === "object" && module.exports) {
+    factory(require("core"), module);
+  } else {
+    root.Aquafaba = root.Aquafaba || {};
+    if (!root.Aquafaba.core) {
+      throw new Error("Aquafaba.core was not found");
+    }
+    let module = {exports: {}};
+    factory(root.Aquafaba.core, module);
+    root.Aquafaba.iterables = module.exports;
+  }
+})(this, (core, module) => {
   module.exports = {};
   module.exports.Iterable = class Iterable {
     static [Symbol.hasInstance](obj) {
