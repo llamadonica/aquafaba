@@ -3,7 +3,16 @@
  * Copyright (c) 2017 Adam Stark. All rights reserved.
  * This code may only be used under the BSD style license found at LICENSE.txt
  */
-define('uuid', [], function () {
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define([], factory);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    module.exports = factory(); // eslint-disable-line no-undef
+  } else {
+    root.Aquafaba = root.Aquafaba || {};
+    root.Aquafaba.uuid = factory();
+  }
+})(this, function () {
   let exports = {};
   exports.v4 = () => {
     function s4() {

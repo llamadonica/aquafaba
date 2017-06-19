@@ -3,10 +3,24 @@
  * Copyright (c) 2017 Adam Stark. All rights reserved.
  * This code may only be used under the BSD style license found at LICENSE.txt
  */
-(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
-c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
-
-define('collection', ['core','iterables', 'module'], (core, iterables, module) => {
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define(["./core.js", "./iterables.js", "module"], factory);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(require("core"), require("iterables"), module); // eslint-disable-line no-undef
+  } else {
+    root.Aquafaba = root.Aquafaba || {};
+    if (!root.Aquafaba.core) {
+      throw new Error("Aquafaba.core was not found");
+    }
+    if (!root.Aquafaba.iterables) {
+      throw new Error("Aquafaba.iterables was not found");
+    }
+    let moduleProxy = {exports: {}};
+    factory(root.Aquafaba.core, root.Aquafaba.iterables, moduleProxy);
+    root.Aquafaba.iterables = moduleProxy.exports;
+  }
+})(this, (core, iterables, module) => {
   module.exports = {};
 
   const _SIZE = Symbol('_size');

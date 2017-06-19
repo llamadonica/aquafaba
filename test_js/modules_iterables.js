@@ -3,7 +3,7 @@
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define(['iterables', 'core'], function (iterables,core) {
+define(['../iterables.js', '../core.js'], function (iterables,core) {
   suite('Iterable tests', function () {
     test('Library loads', (done) => {
       done();

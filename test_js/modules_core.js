@@ -3,7 +3,7 @@
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define(['core'], function (core) {
+define(['../core.js'], function (core) {
   var Iterable__T = core.makeGenericType((T) => {
     return class extends Object {
       static get name() { return `Iterable<${T.name}>`; }

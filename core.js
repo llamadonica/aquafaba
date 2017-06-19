@@ -34,11 +34,19 @@
   }
   window.Symbol = window.Symbol || _SymbolPolyfill.make; // eslint-disable-line no-global-assign
 })();
-(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
-c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
-
-define('core', ['module'], function (module) {
-  module.exports = {};
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define(["module"], factory);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(module); // eslint-disable-line no-undef
+  } else {
+    root.Aquafaba = root.Aquafaba || {};
+    let moduleProxy = {exports: {}};
+    factory(moduleProxy);
+    root.Aquafaba.core = moduleProxy.exports;
+  }
+})(this, function (module) {
+  module.exports = module.exports || {};
 
   let AssertionException = module.exports.AssertionException =
       class AssertionException {
