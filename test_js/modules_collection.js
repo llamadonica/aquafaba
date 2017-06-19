@@ -13,7 +13,7 @@ function setPerformance(x) {
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define(['collection', 'iterables'], function (collection, iterables) {
+define(['../collection.js', '../iterables.js'], function (collection, iterables) {
   suite('Collection tests', function () {
     function mapGen(from, to) {
       let map = new collection.LinkedHashMap();
