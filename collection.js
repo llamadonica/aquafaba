@@ -6,8 +6,8 @@
 (function (root, factory) {
   if(typeof define === "function" && define.amd) {
     define(["./core.js", "./iterables.js", "module"], factory);
-  } else if(typeof module === "object" && module.exports) {
-    factory(require("core"), require("iterables"), module);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(require("core"), require("iterables"), module); // eslint-disable-line no-undef
   } else {
     root.Aquafaba = root.Aquafaba || {};
     if (!root.Aquafaba.core) {
@@ -16,9 +16,9 @@
     if (!root.Aquafaba.iterables) {
       throw new Error("Aquafaba.iterables was not found");
     }
-    let module = {exports: {}};
-    factory(root.Aquafaba.core, root.Aquafaba.iterables, module);
-    root.Aquafaba.iterables = module.exports;
+    let moduleProxy = {exports: {}};
+    factory(root.Aquafaba.core, root.Aquafaba.iterables, moduleProxy);
+    root.Aquafaba.iterables = moduleProxy.exports;
   }
 })(this, (core, iterables, module) => {
   module.exports = {};

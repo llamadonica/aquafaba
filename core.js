@@ -37,13 +37,13 @@
 (function (root, factory) {
   if(typeof define === "function" && define.amd) {
     define(["module"], factory);
-  } else if(typeof module === "object" && module.exports) {
-    factory(module);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(module); // eslint-disable-line no-undef
   } else {
     root.Aquafaba = root.Aquafaba || {};
-    let module = {exports: {}};
-    factory(module);
-    root.Aquafaba.core = module.exports;
+    let moduleProxy = {exports: {}};
+    factory(moduleProxy);
+    root.Aquafaba.core = moduleProxy.exports;
   }
 })(this, function (module) {
   module.exports = module.exports || {};

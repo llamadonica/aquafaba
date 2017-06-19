@@ -1,16 +1,16 @@
 (function (root, factory) {
   if(typeof define === "function" && define.amd) {
     define(["./core.js", "module"], factory);
-  } else if(typeof module === "object" && module.exports) {
-    factory(require("core"), module);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(require("core"), module); // eslint-disable-line no-undef
   } else {
     root.Aquafaba = root.Aquafaba || {};
     if (!root.Aquafaba.core) {
       throw new Error("Aquafaba.core was not found");
     }
-    let module = {exports: {}};
-    factory(root.Aquafaba.core, module);
-    root.Aquafaba.iterables = module.exports;
+    let moduleProxy = {exports: {}};
+    factory(root.Aquafaba.core, moduleProxy);
+    root.Aquafaba.iterables = moduleProxy.exports;
   }
 })(this, (core, module) => {
   module.exports = {};
