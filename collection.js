@@ -18,7 +18,7 @@
     }
     let moduleProxy = {exports: {}};
     factory(root.Aquafaba.core, root.Aquafaba.iterables, moduleProxy);
-    root.Aquafaba.iterables = moduleProxy.exports;
+    root.Aquafaba.collection = moduleProxy.exports;
   }
 })(this, (core, iterables, module) => {
   module.exports = {};
@@ -77,13 +77,14 @@
   }
 
   let _WrapMapIterable = iterables.EfficientLengthMixin(_WrapMapIterableBase);
+  let WRAP_CONTENTS = Symbol('_wrapMapContents');
 
-  module.exports.WrapMap = class WrapMap extends Map {
+  module.exports.WrapMap = class WrapMap {
     constructor(sizeOrMap) {
       if (sizeOrMap instanceof Map) {
-        super(sizeOrMap);
+        this[WRAP_CONTENTS] = new Map(sizeOrMap);
       } else {
-        super();
+        this[WRAP_CONTENTS] = new Map();
       }
       if (sizeOrMap && sizeOrMap.entries) {
         this.setAll(sizeOrMap);
@@ -99,28 +100,37 @@
       if (!this.has(key)) {
         this[_REV]++;
       }
-      super.set(key,value);
+      this[WRAP_CONTENTS].set(key,value);
     }
     setIfAbsent(key, valueFactory) {
       if (!this.has(key)) {
         this[_REV]++;
-        super.set(key,valueFactory());
+        this[WRAP_CONTENTS].set(key,valueFactory());
       }
+    }
+    get size() {
+      return this[WRAP_CONTENTS].size;
+    }
+    get(key) {
+      return this[WRAP_CONTENTS].get(key);
+    }
+    has(key) {
+      return this[WRAP_CONTENTS].has(key);
     }
     delete(key) {
       if (this.has(key)) {
         this[_REV]++;
       }
-      super.delete(key);
+      this[WRAP_CONTENTS].delete(key);
     }
     clear() {
       if (this.size > 0) {
         this[_REV]++;
       }
-      super.clear();
+      this[WRAP_CONTENTS].clear();
     }
     [_NATIVE_ENTRIES]() {
-      return super.entries();
+      return this[WRAP_CONTENTS].entries();
     }
     entries() {
       return new _WrapMapIterable(this);
@@ -130,6 +140,9 @@
     }
     values() {
       return this.entries().map(kvPair => kvPair[1]);
+    }
+    forEach(callback, thisArg) {
+      this[WRAP_CONTENTS].forEach(callback, thisArg);
     }
   };
 
@@ -440,8 +453,9 @@
         &&
         !(cell = this[_MAP][_CELLS][this[_INDEX]]));
       if (!cell) {
-        core.assert(() => this[_I] == this[_MAP].size,
-               "Expected number of elements yielded to be same as list length");
+        let map = this[_MAP];
+        let i = this[_I];
+        core.assert(() => i == map.size, "Expected number of elements yielded to be same as list length");
         return {done: true};
       }
       this[_I]++;

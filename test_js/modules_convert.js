@@ -1,6 +1,40 @@
-(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
-c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
-define(['../convert.js'], function (convert) {
+(function (root, factory) {
+  var onWebcomponentsReady = function () {
+    throw new Error("WebComponents aren't loaded so they will never be ready :(");
+  }
+  if ('registerElement' in document
+      && 'import' in document.createElement('link')
+      && 'content' in document.createElement('template')) {
+    onWebcomponentsReady = function (cb) { cb(); };
+  } else {
+    (function () {
+      var cbs = [];
+      onWebcomponentsReady = function (cb) { cbs.push(cb); };
+      window.addEventListener('WebComponentsReady', function () {
+        for (var i = 0; i < cbs.length; i++) {
+          cbs[i]();
+        }
+        onWebcomponentsReady = function (cb) { cb(); };
+      });
+    })();
+    var e = document.createElement('script');
+    e.src = '/bower_components/webcomponentsjs/webcomponents-lite.min.js';
+    document.body.appendChild(e);
+  }
+  onWebcomponentsReady(() => {
+    if(typeof define === "function" && define.amd) {
+      define(["./convert.js"], factory);
+    } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+      factory(require("convert")); // eslint-disable-line no-undef
+    } else {
+      root.Aquafaba = root.Aquafaba || {};
+      if (!root.Aquafaba.convert) {
+        throw new Error("Aquafaba.convert was not found");
+      }
+      factory(root.Aquafaba.convert);
+    }
+  });
+})(this, (convert) => {
   function uint8Equals(valueA, valueB) {
     var iterA = valueA[Symbol.iterator]();
     var iterB = valueB[Symbol.iterator]();

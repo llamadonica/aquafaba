@@ -3,7 +3,6 @@
     "ecmaVersion": 6
   },
   "extends": ["eslint:recommended"],
-  "es6": true,
   "env": {
     "browser": true,
     "es6": true,

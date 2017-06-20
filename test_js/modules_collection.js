@@ -10,10 +10,46 @@ function setPerformance(x) {
 //   list.getEntries().forEach(entry => console.log(`${entry.name}: ${entry.startTime}`)));
 // performanceOberver.observe({entryTypes: ["mark"]});
 
-(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
-c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
-
-define(['../collection.js', '../iterables.js'], function (collection, iterables) {
+(function (root, factory) {
+  var onWebcomponentsReady = function () {
+    throw new Error("WebComponents aren't loaded so they will never be ready :(");
+  }
+  if ('registerElement' in document
+      && 'import' in document.createElement('link')
+      && 'content' in document.createElement('template')) {
+    onWebcomponentsReady = function (cb) { cb(); };
+  } else {
+    (function () {
+      var cbs = [];
+      onWebcomponentsReady = function (cb) { cbs.push(cb); };
+      window.addEventListener('WebComponentsReady', function () {
+        for (var i = 0; i < cbs.length; i++) {
+          cbs[i]();
+        }
+        onWebcomponentsReady = function (cb) { cb(); };
+      });
+    })();
+    var e = document.createElement('script');
+    e.src = '/bower_components/webcomponentsjs/webcomponents-lite.min.js';
+    document.body.appendChild(e);
+  }
+  onWebcomponentsReady(() => {
+    if(typeof define === "function" && define.amd) {
+      define(["./collection.js", "./iterables.js"], factory);
+    } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+      factory(require("collection"), require("iterables")); // eslint-disable-line no-undef
+    } else {
+      root.Aquafaba = root.Aquafaba || {};
+      if (!root.Aquafaba.collection) {
+        throw new Error("Aquafaba.collection was not found");
+      }
+      if (!root.Aquafaba.iterables) {
+        throw new Error("Aquafaba.iterables was not found");
+      }
+      factory(root.Aquafaba.collection, root.Aquafaba.iterables);
+    }
+  });
+})(this, (collection, iterables) => {
   suite('Collection tests', function () {
     function mapGen(from, to) {
       let map = new collection.LinkedHashMap();

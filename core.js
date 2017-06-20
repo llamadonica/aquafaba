@@ -5,7 +5,7 @@
  */
 (() => {
   // Polymer is officially supported on IE11, so here's a quick little
-  // polyfill.
+  // polyfill, that adds some important stuff for Arrays.
   let ix = 0;
   function lazyGet(fn) {
     let value;
@@ -32,8 +32,37 @@
       return `##Symbol#${this.str}#${this.ix}`
     }
   }
-  window.Symbol = window.Symbol || _SymbolPolyfill.make; // eslint-disable-line no-global-assign
+  if (!window.Symbol) {
+    window.Symbol =  _SymbolPolyfill.make; // eslint-disable-line no-global-assign
+    window.Symbol.iterator = window.Symbol('iterator');
+  }
+
+  var IX = Symbol('_ix');
+  var ARRAY = Symbol('_array');
+  class _ArrayIterator {
+    constructor(src) {
+      this[IX] = -1;
+      this[ARRAY] = src; 
+    }
+    next() {
+      this[IX]++;
+      if (this[ARRAY].length <= this[IX]) return {done: true};
+      return {done:false, value: this[ARRAY][this[IX]] };
+    }
+  }
+  Array.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator] || (function () { return new _ArrayIterator(this)});
+  Number.isNaN = Number.isNaN || function(value) {     
+    return value !== value;
+  }
+  Map.prototype.entries = Map.prototype.entries || (function () {
+    let array = [];
+    this.forEach(function (value, key) {
+      array.push([key, value]);
+    });
+    return array;
+  });
 })();
+
 (function (root, factory) {
   if(typeof define === "function" && define.amd) {
     define(["module"], factory);
@@ -71,17 +100,19 @@
       for (var i = 0; i < fn.length - 1; i++) {
         let reifiedType = typeArgs[i];
         realTypeArgs.push(reifiedType);
-        currentMap = currentMap[reifiedType];
+        currentMap = currentMap.get(reifiedType);
         if (!currentMap) {
-          typeMap[reifiedType] = currentMap = new WeakMap();
+          let nextMap = new WeakMap();
+          currentMap.set(reifiedType, nextMap);
+          currentMap = nextMap;
         }
       }
       if (fn.length > 0) {
         let reifiedType = typeArgs[i];
         realTypeArgs.push(reifiedType);
-        let finalType = currentMap[reifiedType];
+        let finalType = currentMap.get(reifiedType);
         if (!finalType) {
-          currentMap[reifiedType] = finalType = fn.apply(fn, typeArgs);
+          currentMap.set(reifiedType, finalType = fn.apply(fn, typeArgs));
           finalType.$isGeneric = true;
           finalType.$typeArguments = realTypeArgs;
           finalType.$classDefinition = fn;
