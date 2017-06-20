@@ -18,7 +18,7 @@
     }
     let moduleProxy = {exports: {}};
     factory(root.Aquafaba.core, root.Aquafaba.iterables, moduleProxy);
-    root.Aquafaba.iterables = moduleProxy.exports;
+    root.Aquafaba.collection = moduleProxy.exports;
   }
 })(this, (core, iterables, module) => {
   module.exports = {};

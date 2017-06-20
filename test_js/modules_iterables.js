@@ -3,7 +3,22 @@
 (function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
 c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
 
-define(['../iterables.js', '../core.js'], function (iterables,core) {
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define(["./iterables.js", "./core.js"], factory);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(require("iterables"), require("core")); // eslint-disable-line no-undef
+  } else {
+    root.Aquafaba = root.Aquafaba || {};
+    if (!root.Aquafaba.core) {
+      throw new Error("Aquafaba.core was not found");
+    }
+    if (!root.Aquafaba.iterables) {
+      throw new Error("Aquafaba.iterables was not found");
+    }
+    factory(root.Aquafaba.iterables, root.Aquafaba.core);
+  }
+})(this, function (iterables,core) {
   suite('Iterable tests', function () {
     test('Library loads', (done) => {
       done();

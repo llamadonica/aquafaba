@@ -1,9 +1,18 @@
 // @requires bower_components/imd/imd.js
 
-(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
-c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
-
-define(['../core.js'], function (core) {
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define(["./core.js"], factory);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(require("core")); // eslint-disable-line no-undef
+  } else {
+    root.Aquafaba = root.Aquafaba || {};
+    if (!root.Aquafaba.core) {
+      throw new Error("Aquafaba.core was not found");
+    }
+    factory(root.Aquafaba.core);
+  }
+})(this, (core) => {
   var Iterable__T = core.makeGenericType((T) => {
     return class extends Object {
       static get name() { return `Iterable<${T.name}>`; }

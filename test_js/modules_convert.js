@@ -1,6 +1,16 @@
-(function(s,a,c,q){s[a]=s[a]||function(i,m,f){q.push([i,m,f,c._currentScript||
-c.currentScript]);};q=s[a].q=s[a].q||[];})(window,"define",document);
-define(['../convert.js'], function (convert) {
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define(["./convert.js"], factory);
+  } else if(typeof module === "object" && module.exports) { // eslint-disable-line no-undef
+    factory(require("convert")); // eslint-disable-line no-undef
+  } else {
+    root.Aquafaba = root.Aquafaba || {};
+    if (!root.Aquafaba.convert) {
+      throw new Error("Aquafaba.convert was not found");
+    }
+    factory(root.Aquafaba.convert);
+  }
+})(this, (convert) => {
   function uint8Equals(valueA, valueB) {
     var iterA = valueA[Symbol.iterator]();
     var iterB = valueB[Symbol.iterator]();
